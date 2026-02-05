@@ -1,1 +1,68 @@
-<html><body><h1>ClawPM Web UI</h1></body></html>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>ClawPM</title>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { border-bottom: 2px solid #333; }
+        .project { padding: 1rem; margin: 0.5rem 0; background: #f5f5f5; border-radius: 4px; }
+        .project h3 { margin-top: 0; }
+        .blocker { background: #fee; border-left: 4px solid #c00; padding: 0.5rem 1rem; margin: 0.5rem 0; }
+        button { padding: 0.5rem 1rem; cursor: pointer; }
+        #refresh { margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>ClawPM Dashboard</h1>
+
+    <button id="refresh" hx-get="/api/projects" hx-target="#projects" hx-trigger="click, load">
+        Refresh
+    </button>
+
+    <h2>Projects</h2>
+    <div id="projects" hx-get="/api/projects" hx-trigger="load">
+        <p>Loading...</p>
+    </div>
+
+    <h2>Blockers</h2>
+    <div id="blockers" hx-get="/api/blockers" hx-trigger="load">
+        <p>Loading...</p>
+    </div>
+
+    <template id="project-template">
+        <div class="project">
+            <h3>{{name}}</h3>
+            <p>Status: {{status}} | Priority: {{priority}}</p>
+            <p>Labels: {{labels}}</p>
+        </div>
+    </template>
+
+    <script>
+        // Simple HTMX transform response to HTML
+        document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+            if (evt.detail.xhr.responseURL.includes('/api/projects')) {
+                const projects = JSON.parse(evt.detail.xhr.responseText);
+                const html = projects.map(p => `
+                    <div class="project">
+                        <h3>${p.name}</h3>
+                        <p>Status: ${p.status} | Priority: ${p.priority}</p>
+                        <p>Labels: ${p.labels.join(', ') || 'none'}</p>
+                    </div>
+                `).join('');
+                document.getElementById('projects').innerHTML = html || '<p>No projects found</p>';
+            }
+            if (evt.detail.xhr.responseURL.includes('/api/blockers')) {
+                const blockers = JSON.parse(evt.detail.xhr.responseText);
+                const html = blockers.map(b => `
+                    <div class="blocker">
+                        <strong>${b.project}</strong>: ${b.task.title}
+                    </div>
+                `).join('');
+                document.getElementById('blockers').innerHTML = html || '<p>No blockers</p>';
+            }
+        });
+    </script>
+</body>
+</html>

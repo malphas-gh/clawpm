@@ -130,6 +130,18 @@ class ProjectSettings:
         settings.project_dir = path.parent.parent
         return settings
 
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON output."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "status": self.status.value,
+            "priority": self.priority,
+            "repo_path": str(self.repo_path) if self.repo_path else None,
+            "labels": self.labels,
+            "project_dir": str(self.project_dir) if self.project_dir else None,
+        }
+
 
 @dataclass
 class Task:

@@ -1,0 +1,119 @@
+"""FastAPI server for ClawPM web UI."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+from .discovery import load_portfolio_config, discover_projects, get_project
+from .tasks import list_tasks, change_task_state
+from .worklog import add_entry
+
+
+WEB_DIR = Path(__file__).parent / "web"
+TEMPLATES_DIR = WEB_DIR / "templates"
+STATIC_DIR = WEB_DIR / "static"
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="ClawPM")
+
+    if STATIC_DIR.exists():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/", response_class=HTMLResponse)
+    def index() -> str:
+        index_file = TEMPLATES_DIR / "index.html"
+        return index_file.read_text() if index_file.exists() else "<h1>ClawPM</h1>"
+
+    @app.get("/api/projects")
+    def api_projects() -> list[dict]:
+        config = load_portfolio_config()
+        if not config:
+            return []
+        projects = discover_projects(config)
+        return [p.to_dict() for p in projects]
+
+    @app.get("/api/projects/{project_id}")
+    def api_project_context(project_id: str) -> dict | None:
+        config = load_portfolio_config()
+        if not config:
+            return None
+        project = get_project(config, project_id)
+        return project.to_dict() if project else None
+
+    @app.get("/api/projects/{project_id}/tasks")
+    def api_project_tasks(project_id: str, state: str | None = None) -> list[dict]:
+        config = load_portfolio_config()
+        if not config:
+            return []
+        from .models import TaskState
+        state_filter = TaskState(state) if state else None
+        tasks = list_tasks(config, project_id, state_filter=state_filter)
+        return [t.to_dict() for t in tasks]
+
+    @app.get("/api/blockers")
+    def api_blockers() -> list[dict]:
+        config = load_portfolio_config()
+        if not config:
+            return []
+        from .models import TaskState
+        blockers = []
+        projects = discover_projects(config)
+        for proj in projects:
+            if not proj.project_dir:
+                continue
+            tasks = list_tasks(config, proj.id, state_filter=TaskState.BLOCKED)
+            for task in tasks:
+                blockers.append({"project": proj.id, "task": task.to_dict()})
+        return blockers
+
+    from pydantic import BaseModel
+
+    class StateChangeRequest(BaseModel):
+        state: str
+        note: str | None = None
+
+    @app.post("/api/tasks/{project_id}/{task_id}/state")
+    def api_change_task_state(project_id: str, task_id: str, req: StateChangeRequest) -> dict:
+        config = load_portfolio_config()
+        if not config:
+            return {"error": "no_portfolio"}
+        from .models import TaskState
+        try:
+            state = TaskState(req.state)
+            result = change_task_state(config, project_id, task_id, state, note=req.note)
+            return {"success": True, "task": result.to_dict() if result else None}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    class LogEntryRequest(BaseModel):
+        action: str
+        summary: str
+        task: str | None = None
+        next: str | None = None
+
+    @app.post("/api/log")
+    def api_add_log_entry(project_id: str, req: LogEntryRequest) -> dict:
+        config = load_portfolio_config()
+        if not config:
+            return {"error": "no_portfolio"}
+        from .models import WorkLogAction
+        try:
+            action = WorkLogAction(req.action)
+            entry = add_entry(
+                config,
+                project=project_id,
+                task=req.task,
+                action=action,
+                summary=req.summary,
+                next=req.next,
+            )
+            return {"success": True, "entry": entry.to_dict() if entry else None}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    return app

@@ -870,5 +870,21 @@ def issues_list(ctx: click.Context, project: str, open_only: bool) -> None:
             click.echo(f"{status} [{sev}] {typ}: {issue.get('actual', issue.get('context', 'No description'))}")
 
 
+# ============================================================================
+# Serve command
+# ============================================================================
+
+@main.command("serve")
+@click.option("--host", default="127.0.0.1", help="Host to bind to")
+@click.option("--port", default=8080, help="Port to bind to")
+def serve(host: str, port: int) -> None:
+    """Start the web UI server."""
+    import uvicorn
+    from .serve import create_app
+
+    app = create_app()
+    uvicorn.run(app, host=host, port=port)
+
+
 if __name__ == "__main__":
     main()

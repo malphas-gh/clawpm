@@ -107,6 +107,19 @@ For background research that shouldn't block main work:
 - `clawpm log tail --project <id>` - See recent work history
 - `clawpm setup --check` - Verify installation
 
+## When Working on ClawPM Itself
+
+If you're fixing bugs or adding features to clawpm (project id: `clawpm`):
+
+1. Edit code in `~/Development/clawpm/src/clawpm/`
+2. Test with `clawpm <command>` (runs from source)
+3. Log issues: `clawpm issues add --project clawpm ...`
+4. **Commit your changes before marking task done**:
+   ```bash
+   git add <files>
+   git commit -m "fix/feat: description"
+   ```
+
 ## Important Notes
 
 - Portfolio root must be OUTSIDE OpenClaw workspace (avoids recursion issues)

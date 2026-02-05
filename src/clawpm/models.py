@@ -56,6 +56,7 @@ class ResearchType(str, Enum):
 
 class ResearchStatus(str, Enum):
     OPEN = "open"
+    IN_PROGRESS = "in-progress"
     COMPLETE = "complete"
     STALE = "stale"
 

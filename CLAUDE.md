@@ -107,6 +107,11 @@ This runs from source - no install needed, changes are picked up immediately.
 
 1. Edit source in `~/Development/clawpm/src/clawpm/`
 2. Test immediately with `uv run` - no reinstall needed
+3. **Commit when done** - don't leave fixes uncommitted:
+   ```bash
+   git add <files>
+   git commit -m "fix/feat: description"
+   ```
 
 ### Testing Protocol
 

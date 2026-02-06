@@ -53,6 +53,13 @@ from .research import (
     add_research,
     link_research_session,
 )
+from .context import (
+    resolve_project,
+    expand_task_id,
+    get_context_project,
+    set_context_project,
+    detect_project_from_cwd,
+)
 
 
 # Global format option
@@ -91,6 +98,79 @@ def require_portfolio(ctx: click.Context):
         )
         sys.exit(1)
     return config
+
+
+def require_project(ctx: click.Context, project_id: str | None, required: bool = True) -> tuple[str | None, str]:
+    """Resolve project from explicit arg, cwd, or context.
+    
+    Returns (project_id, source). Exits with error if required and not found.
+    """
+    resolved_id, source = resolve_project(project_id)
+    
+    if required and not resolved_id:
+        fmt = get_format(ctx)
+        output_error(
+            "no_project",
+            "No project specified. Use --project, cd into a project, or run 'clawpm use <project>'.",
+            fmt=fmt,
+        )
+        sys.exit(1)
+    
+    return resolved_id, source
+
+
+# ============================================================================
+# Use command (project context)
+# ============================================================================
+
+
+@main.command("use")
+@click.argument("project_id", required=False)
+@click.option("--clear", is_flag=True, help="Clear the current context")
+@click.pass_context
+def use_project(ctx: click.Context, project_id: str | None, clear: bool) -> None:
+    """Set or show the current project context.
+    
+    When no project is specified, shows the current context.
+    Use --clear to remove the context.
+    """
+    fmt = get_format(ctx)
+    config = require_portfolio(ctx)
+    
+    if clear:
+        set_context_project(None)
+        output_success("Context cleared", fmt=fmt)
+        return
+    
+    if project_id:
+        # Verify project exists
+        proj = get_project(config, project_id)
+        if not proj:
+            output_error("project_not_found", f"Project '{project_id}' not found", fmt=fmt)
+            sys.exit(1)
+        
+        set_context_project(project_id)
+        output_success(f"Now using project: {proj.name} ({proj.id})", fmt=fmt)
+    else:
+        # Show current context
+        current = get_context_project()
+        cwd_project = detect_project_from_cwd()
+        
+        result = {
+            "context_project": current,
+            "cwd_project": cwd_project.id if cwd_project else None,
+            "effective": cwd_project.id if cwd_project else current,
+        }
+        
+        if fmt == OutputFormat.JSON:
+            output_json(result)
+        else:
+            if cwd_project:
+                click.echo(f"Current directory: {cwd_project.name} ({cwd_project.id})")
+            elif current:
+                click.echo(f"Context: {current}")
+            else:
+                click.echo("No project context set. Use 'clawpm use <project>' or cd into a project.")
 
 
 # ============================================================================
@@ -177,12 +257,14 @@ def project() -> None:
 
 
 @project.command("context")
-@click.argument("project_id")
+@click.argument("project_id", required=False)
 @click.pass_context
-def project_context(ctx: click.Context, project_id: str) -> None:
+def project_context(ctx: click.Context, project_id: str | None) -> None:
     """Get full context for a project (spec, last work, next task, blockers)."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
 
     proj = get_project(config, project_id)
     if not proj:
@@ -251,6 +333,7 @@ def project_init(ctx: click.Context, repo_path: str, project_id: str | None, pro
     project_dir.mkdir(parents=True)
     (project_dir / "tasks").mkdir()
     (project_dir / "tasks" / "done").mkdir()
+    (project_dir / "tasks" / "blocked").mkdir()
     (project_dir / "research").mkdir()
     (project_dir / "notes").mkdir()
 
@@ -381,7 +464,7 @@ def tasks() -> None:
 
 
 @tasks.command("list")
-@click.option("--project", "-p", "project_id", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.option(
     "--state", "-s",
     type=click.Choice(["open", "progress", "done", "blocked", "all"]),
@@ -389,10 +472,12 @@ def tasks() -> None:
     help="Filter by state",
 )
 @click.pass_context
-def tasks_list(ctx: click.Context, project_id: str, state: str) -> None:
+def tasks_list(ctx: click.Context, project_id: str | None, state: str) -> None:
     """List tasks for a project."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
 
     state_filter = None if state == "all" else TaskState(state)
     found_tasks = list_tasks(config, project_id, state_filter=state_filter)
@@ -401,13 +486,16 @@ def tasks_list(ctx: click.Context, project_id: str, state: str) -> None:
 
 
 @tasks.command("show")
-@click.option("--project", "-p", "project_id", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.argument("task_id")
 @click.pass_context
-def tasks_show(ctx: click.Context, project_id: str, task_id: str) -> None:
+def tasks_show(ctx: click.Context, project_id: str | None, task_id: str) -> None:
     """Show details for a specific task."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
+    task_id = expand_task_id(task_id, project_id)
 
     task = get_task(config, project_id, task_id)
     if not task:
@@ -418,15 +506,18 @@ def tasks_show(ctx: click.Context, project_id: str, task_id: str) -> None:
 
 
 @tasks.command("state")
-@click.option("--project", "-p", "project_id", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.argument("task_id")
 @click.argument("new_state", type=click.Choice(["open", "progress", "done", "blocked"]))
 @click.option("--note", "-n", help="Note about the state change")
 @click.pass_context
-def tasks_state(ctx: click.Context, project_id: str, task_id: str, new_state: str, note: str | None) -> None:
+def tasks_state(ctx: click.Context, project_id: str | None, task_id: str, new_state: str, note: str | None) -> None:
     """Change task state."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
+    task_id = expand_task_id(task_id, project_id)
 
     state = TaskState(new_state)
     task = change_task_state(config, project_id, task_id, state, note=note)
@@ -439,7 +530,7 @@ def tasks_state(ctx: click.Context, project_id: str, task_id: str, new_state: st
 
 
 @tasks.command("add")
-@click.option("--project", "-p", "project_id", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.option("--title", "-t", required=True, help="Task title")
 @click.option("--id", "task_id", help="Task ID (auto-generated if not provided)")
 @click.option("--priority", type=int, default=5, help="Priority (1-10, lower is higher)")
@@ -452,7 +543,7 @@ def tasks_state(ctx: click.Context, project_id: str, task_id: str, new_state: st
 @click.pass_context
 def tasks_add(
     ctx: click.Context,
-    project_id: str,
+    project_id: str | None,
     title: str,
     task_id: str | None,
     priority: int,
@@ -466,6 +557,8 @@ def tasks_add(
     """Add a new task."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
 
     # Determine body content
     task_body = ""
@@ -501,6 +594,161 @@ def tasks_add(
 
 
 # ============================================================================
+# Top-level task shortcuts
+# ============================================================================
+
+
+@main.command("add")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.argument("title")
+@click.option("--priority", type=int, default=5, help="Priority (1-10)")
+@click.option("--complexity", "-c", type=click.Choice(["s", "m", "l", "xl"]), default="m", help="Complexity")
+@click.pass_context
+def quick_add(ctx: click.Context, project_id: str | None, title: str, priority: int, complexity: str) -> None:
+    """Quick add a task (alias for 'tasks add')."""
+    ctx.invoke(tasks_add, project_id=project_id, title=title, priority=priority, complexity=complexity)
+
+
+@main.command("done")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.argument("task_id")
+@click.option("--note", "-n", help="Completion note")
+@click.pass_context
+def quick_done(ctx: click.Context, project_id: str | None, task_id: str, note: str | None) -> None:
+    """Mark a task as done (alias for 'tasks state <id> done')."""
+    ctx.invoke(tasks_state, project_id=project_id, task_id=task_id, new_state="done", note=note)
+
+
+@main.command("start")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.argument("task_id")
+@click.pass_context
+def quick_start(ctx: click.Context, project_id: str | None, task_id: str) -> None:
+    """Start working on a task (alias for 'tasks state <id> progress')."""
+    ctx.invoke(tasks_state, project_id=project_id, task_id=task_id, new_state="progress", note=None)
+
+
+@main.command("block")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.argument("task_id")
+@click.option("--note", "-n", help="Blocker description")
+@click.pass_context
+def quick_block(ctx: click.Context, project_id: str | None, task_id: str, note: str | None) -> None:
+    """Mark a task as blocked (alias for 'tasks state <id> blocked')."""
+    ctx.invoke(tasks_state, project_id=project_id, task_id=task_id, new_state="blocked", note=note)
+
+
+@main.command("next")
+@click.option("--project", "-p", "project_id", help="Project ID (if not specified, searches all)")
+@click.pass_context
+def quick_next(ctx: click.Context, project_id: str | None) -> None:
+    """Get the next task to work on."""
+    fmt = get_format(ctx)
+    config = require_portfolio(ctx)
+    
+    if project_id:
+        # Get next task for specific project
+        task = get_next_task(config, project_id)
+        if task:
+            output_task_detail(task, fmt=fmt)
+        else:
+            if fmt == OutputFormat.JSON:
+                output_json({"task": None, "message": "No tasks available"})
+            else:
+                click.echo("No tasks available.")
+    else:
+        # Delegate to projects next
+        ctx.invoke(projects_next)
+
+
+@main.command("status")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.pass_context
+def quick_status(ctx: click.Context, project_id: str | None) -> None:
+    """Show current project status (tasks in progress, blockers, next up)."""
+    fmt = get_format(ctx)
+    config = require_portfolio(ctx)
+    
+    resolved_id, source = require_project(ctx, project_id, required=False)
+    
+    if not resolved_id:
+        # Show overview of all projects
+        projects_found = discover_projects(config, status_filter=ProjectStatus.ACTIVE)
+        
+        result = {
+            "projects": [],
+            "total_active": 0,
+            "total_blocked": 0,
+        }
+        
+        for proj in projects_found:
+            in_progress = list_tasks(config, proj.id, state_filter=TaskState.PROGRESS)
+            blocked = list_tasks(config, proj.id, state_filter=TaskState.BLOCKED)
+            
+            proj_info = {
+                "id": proj.id,
+                "name": proj.name,
+                "in_progress": len(in_progress),
+                "blocked": len(blocked),
+            }
+            result["projects"].append(proj_info)
+            result["total_active"] += len(in_progress)
+            result["total_blocked"] += len(blocked)
+        
+        if fmt == OutputFormat.JSON:
+            output_json(result)
+        else:
+            click.echo(f"Active: {result['total_active']} tasks in progress, {result['total_blocked']} blocked\n")
+            for proj in result["projects"]:
+                status_str = []
+                if proj["in_progress"]:
+                    status_str.append(f"{proj['in_progress']} active")
+                if proj["blocked"]:
+                    status_str.append(f"{proj['blocked']} blocked")
+                click.echo(f"  {proj['name']}: {', '.join(status_str) if status_str else 'idle'}")
+    else:
+        # Show specific project status
+        proj = get_project(config, resolved_id)
+        if not proj:
+            output_error("project_not_found", f"Project '{resolved_id}' not found", fmt=fmt)
+            sys.exit(1)
+        
+        in_progress = list_tasks(config, resolved_id, state_filter=TaskState.PROGRESS)
+        blocked = list_tasks(config, resolved_id, state_filter=TaskState.BLOCKED)
+        open_tasks = list_tasks(config, resolved_id, state_filter=TaskState.OPEN)
+        next_task = get_next_task(config, resolved_id)
+        
+        result = {
+            "project": proj.id,
+            "name": proj.name,
+            "source": source,
+            "in_progress": [t.to_dict() for t in in_progress],
+            "blocked": [t.to_dict() for t in blocked],
+            "open_count": len(open_tasks),
+            "next": next_task.to_dict() if next_task else None,
+        }
+        
+        if fmt == OutputFormat.JSON:
+            output_json(result)
+        else:
+            click.echo(f"Project: {proj.name} ({source})")
+            click.echo(f"Open: {len(open_tasks)} | In Progress: {len(in_progress)} | Blocked: {len(blocked)}")
+            
+            if in_progress:
+                click.echo("\nIn Progress:")
+                for t in in_progress:
+                    click.echo(f"  → {t.id}: {t.title}")
+            
+            if blocked:
+                click.echo("\nBlocked:")
+                for t in blocked:
+                    click.echo(f"  ✗ {t.id}: {t.title}")
+            
+            if next_task and next_task not in in_progress:
+                click.echo(f"\nNext up: {next_task.id}: {next_task.title}")
+
+
+# ============================================================================
 # Log commands
 # ============================================================================
 
@@ -512,7 +760,7 @@ def log() -> None:
 
 
 @log.command("add")
-@click.option("--project", "-p", "project_id", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.option("--task", "-t", "task_id", help="Task ID")
 @click.option(
     "--action", "-a",
@@ -529,7 +777,7 @@ def log() -> None:
 @click.pass_context
 def log_add(
     ctx: click.Context,
-    project_id: str,
+    project_id: str | None,
     task_id: str | None,
     action: str,
     summary: str,
@@ -542,6 +790,12 @@ def log_add(
     """Add a work log entry."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
+    
+    # Expand task ID if provided
+    if task_id:
+        task_id = expand_task_id(task_id, project_id)
 
     entry = add_entry(
         config,
@@ -603,14 +857,16 @@ def research() -> None:
 
 
 @research.command("list")
-@click.option("--project", "-p", "project_id", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.option("--status", "-s", type=click.Choice(["open", "complete", "stale"]), help="Filter by status")
 @click.option("--tags", "-t", multiple=True, help="Filter by tags (must have all)")
 @click.pass_context
-def research_list(ctx: click.Context, project_id: str, status: str | None, tags: tuple[str, ...]) -> None:
+def research_list(ctx: click.Context, project_id: str | None, status: str | None, tags: tuple[str, ...]) -> None:
     """List research items."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
 
     status_filter = ResearchStatus(status) if status else None
     tags_filter = list(tags) if tags else None
@@ -620,7 +876,7 @@ def research_list(ctx: click.Context, project_id: str, status: str | None, tags:
 
 
 @research.command("add")
-@click.option("--project", "-p", "project_id", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.option("--type", "-t", "research_type", type=click.Choice(["investigation", "spike", "decision", "reference"]), required=True)
 @click.option("--title", required=True, help="Research title")
 @click.option("--id", "research_id", help="Research ID (auto-generated if not provided)")
@@ -629,7 +885,7 @@ def research_list(ctx: click.Context, project_id: str, status: str | None, tags:
 @click.pass_context
 def research_add(
     ctx: click.Context,
-    project_id: str,
+    project_id: str | None,
     research_type: str,
     title: str,
     research_id: str | None,
@@ -639,6 +895,8 @@ def research_add(
     """Add a new research item."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
 
     # Support both -t tag1 -t tag2 and --tags tag1,tag2
     parsed_tags = []
@@ -663,7 +921,7 @@ def research_add(
 
 
 @research.command("link")
-@click.option("--project", "-p", "project_id", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.option("--id", "research_id", required=True, help="Research ID")
 @click.option("--session-key", "-s", required=True, help="OpenClaw session key")
 @click.option("--run-id", "-r", help="OpenClaw run ID")
@@ -671,7 +929,7 @@ def research_add(
 @click.pass_context
 def research_link(
     ctx: click.Context,
-    project_id: str,
+    project_id: str | None,
     research_id: str,
     session_key: str,
     run_id: str | None,
@@ -680,6 +938,8 @@ def research_link(
     """Link a research item to an OpenClaw session."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
 
     item = link_research_session(
         config,
@@ -783,7 +1043,7 @@ def issues_group() -> None:
 
 
 @issues_group.command("add")
-@click.option("--project", "-p", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.option("--type", "-t", "issue_type", type=click.Choice(["bug", "ux", "docs", "feature"]), default="bug", help="Issue type")
 @click.option("--severity", "-s", type=click.Choice(["high", "medium", "low"]), default="medium", help="Severity")
 @click.option("--command", "-c", "cmd", help="Command that triggered the issue")
@@ -793,7 +1053,7 @@ def issues_group() -> None:
 @click.pass_context
 def issues_add(
     ctx: click.Context,
-    project: str,
+    project_id: str | None,
     issue_type: str,
     severity: str,
     cmd: str | None,
@@ -807,10 +1067,12 @@ def issues_add(
 
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
-    proj = get_project(config, project)
+    
+    project_id, _ = require_project(ctx, project_id)
+    proj = get_project(config, project_id)
 
     if not proj:
-        output_error("project_not_found", f"Project '{project}' not found", fmt=fmt)
+        output_error("project_not_found", f"Project '{project_id}' not found", fmt=fmt)
         sys.exit(1)
 
     # Create .agent directory if needed
@@ -842,19 +1104,21 @@ def issues_add(
 
 
 @issues_group.command("list")
-@click.option("--project", "-p", required=True, help="Project ID")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.option("--open", "open_only", is_flag=True, help="Show only unfixed issues")
 @click.pass_context
-def issues_list(ctx: click.Context, project: str, open_only: bool) -> None:
+def issues_list(ctx: click.Context, project_id: str | None, open_only: bool) -> None:
     """List issues for a project."""
     import json
 
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
-    proj = get_project(config, project)
+    
+    project_id, _ = require_project(ctx, project_id)
+    proj = get_project(config, project_id)
 
     if not proj:
-        output_error("project_not_found", f"Project '{project}' not found", fmt=fmt)
+        output_error("project_not_found", f"Project '{project_id}' not found", fmt=fmt)
         sys.exit(1)
 
     issues_file = proj.project_dir / ".agent" / "issues.jsonl"

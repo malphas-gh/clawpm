@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .discovery import load_portfolio_config, discover_projects, get_project
-from .tasks import list_tasks, change_task_state
+from .tasks import list_tasks, get_task, change_task_state
 from .worklog import add_entry, tail_entries
 
 
@@ -87,6 +87,44 @@ def create_app() -> FastAPI:
             state = TaskState(req.state)
             result = change_task_state(config, project_id, task_id, state, note=req.note)
             return {"success": True, "task": result.to_dict() if result else None}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    class RespondRequest(BaseModel):
+        response: str
+        unblock: bool = False
+
+    @app.post("/api/tasks/{project_id}/{task_id}/respond")
+    def api_respond_to_task(project_id: str, task_id: str, req: RespondRequest) -> dict:
+        config = load_portfolio_config()
+        if not config:
+            return {"error": "no_portfolio"}
+        try:
+            from datetime import datetime
+            from .models import TaskState
+
+            task = get_task(config, project_id, task_id)
+            if not task or not task.file_path:
+                return {"success": False, "error": "task_not_found"}
+
+            # Append response to task file
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            response_line = f"\n{timestamp} [Web UI]: {req.response}"
+
+            content = task.file_path.read_text()
+
+            # Add Responses section if not exists
+            if "## Responses" not in content:
+                content += "\n\n## Responses\n"
+
+            content += response_line
+            task.file_path.write_text(content)
+
+            # Optionally unblock
+            if req.unblock and task.state == TaskState.BLOCKED:
+                change_task_state(config, project_id, task_id, TaskState.PROGRESS)
+
+            return {"success": True, "timestamp": timestamp}
         except Exception as e:
             return {"success": False, "error": str(e)}
 

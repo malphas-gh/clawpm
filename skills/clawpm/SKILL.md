@@ -9,119 +9,179 @@ metadata: { "openclaw": { "requires": { "bins": ["clawpm"] }, "emoji": "📋" } 
 
 Use `clawpm` for multi-project task management. All commands emit JSON by default.
 
-## When to Use ClawPM vs OpenClaw Session Tools
-
-| Task | Tool |
-|------|------|
-| Query tasks across projects | `clawpm projects next`, `clawpm tasks list` |
-| Change task state | `clawpm tasks state` |
-| Log work progress | `clawpm log add` |
-| Get project context | `clawpm project context` |
-| Spawn background research | `sessions_spawn` (then `clawpm research link`) |
-| Review past conversations | `sessions_history` |
-
-## Quick Reference
+## Quick Start
 
 ```bash
-# See what's next
-clawpm projects next
+# If you're in a project directory, no --project needed:
+cd ~/Development/my-project
+clawpm status              # See project status
+clawpm next                # Get next task
+clawpm start 42            # Start task (short ID works)
+clawpm done 42             # Mark done
 
-# Get full context for a project
-clawpm project context <project_id>
-
-# List tasks
-clawpm tasks list --project <id> --state open
-
-# Change task state
-clawpm tasks state --project <id> <task_id> progress|done|blocked
-
-# Log work
-clawpm log add --project <id> --task <task_id> --action progress --summary "..."
-
-# See recent work
-clawpm log tail --project <id> --limit 10
+# Or set a project context:
+clawpm use my-project
+clawpm status              # Now uses my-project
 ```
 
-## Starting Work
+## Top-Level Commands (Shortcuts)
 
-1. Find next task: `clawpm projects next`
-2. Get context: `clawpm project context <project_id>`
-3. Mark in-progress: `clawpm tasks state --project <id> <task_id> progress`
-4. Read the task file for full details
+| Command | Equivalent | Description |
+|---------|------------|-------------|
+| `clawpm add "Title"` | `clawpm tasks add -t "Title"` | Quick add a task |
+| `clawpm done 42` | `clawpm tasks state 42 done` | Mark task done |
+| `clawpm start 42` | `clawpm tasks state 42 progress` | Start working |
+| `clawpm block 42` | `clawpm tasks state 42 blocked` | Mark blocked |
+| `clawpm next` | `clawpm projects next` | Get next task |
+| `clawpm status` | - | Project overview |
+| `clawpm use <id>` | - | Set project context |
 
-## During Work
+## Project Auto-Detection
 
-Log progress periodically:
+ClawPM automatically detects your project from:
+1. **Explicit flag**: `--project clawpm` (highest priority)
+2. **Current directory**: Walks up looking for `.project/settings.toml`
+3. **Context**: Previously set with `clawpm use <project>`
+
+This means most commands work without specifying `--project`:
 ```bash
-clawpm log add --project <id> --task <task_id> --action progress \
-  --summary "What you did" --next "What's next"
+cd ~/Development/clawpm
+clawpm tasks list          # Lists clawpm tasks automatically
+clawpm done 30             # Marks CLAWP-030 done
 ```
 
-## Completing Work
+## Short Task IDs
 
-1. Verify acceptance criteria are met
-2. Mark done: `clawpm tasks state --project <id> <task_id> done --note "..."`
-3. Log completion: `clawpm log add --project <id> --task <task_id> --action done --summary "..."`
+You can use just the numeric part of a task ID:
+- `42` → `CLAWP-042` (prefix derived from project ID)
+- `CLAWP-042` → `CLAWP-042` (full ID works too)
+
+## Web Dashboard
+
+```bash
+clawpm serve               # Start on http://127.0.0.1:8080
+clawpm serve --port 8888   # Custom port
+```
+
+Features:
+- Real-time overview of blockers, active tasks, projects
+- Respond to blockers directly
+- Quick add tasks/issues
+- Pause/resume projects
+
+## Full Command Reference
+
+### Projects
+```bash
+clawpm projects list                    # List all projects
+clawpm projects next                    # Next task across all projects
+clawpm project context [project]        # Full project context (spec, last work, blockers)
+clawpm project init                     # Initialize project in current dir
+```
+
+### Tasks
+```bash
+clawpm tasks list [--state open|done|blocked|progress|all]
+clawpm tasks show <id>                  # Task details
+clawpm tasks add -t "Title" [--priority 3] [--complexity m]
+clawpm tasks state <id> open|progress|done|blocked [--note "..."]
+```
+
+### Work Log
+```bash
+clawpm log add --task <id> --action progress --summary "What I did"
+clawpm log tail [--limit 10]            # Recent entries
+clawpm log last                         # Most recent entry
+```
+
+### Research
+```bash
+clawpm research list
+clawpm research add --type investigation --title "Question"
+clawpm research link --id <research_id> --session-key <key>
+```
+
+### Issues
+```bash
+clawpm issues add --type bug --severity high --actual "What happened"
+clawpm issues list [--open]             # Open issues only
+```
+
+### Admin
+```bash
+clawpm status              # Project overview (or all projects if none selected)
+clawpm doctor              # Health check
+clawpm setup --check       # Verify installation
+clawpm use [project]       # Set/show project context
+clawpm use --clear         # Clear context
+```
+
+## Workflow Example
+
+### Starting a Session
+```bash
+clawpm next                              # Find next task
+clawpm start 42                          # Mark in progress
+# Read the task file for full details
+```
+
+### During Work
+```bash
+clawpm log add --task 42 --action progress --summary "Implemented X"
+```
+
+### Completing Work
+```bash
+git add . && git commit -m "feat: ..."   # Commit changes
+clawpm done 42 --note "Completed"        # Mark done
+clawpm log add --task 42 --action done --summary "..."
+```
+
+### Hit a Blocker
+```bash
+clawpm block 42 --note "Need API credentials"
+# Dashboard shows this; human can respond via web UI
+```
 
 ## Research with Subagents
 
-For background research that shouldn't block main work:
+For background research:
 
-1. Create research file:
-   ```bash
-   clawpm research add --project <id> --type investigation --title "Research question"
-   ```
+1. Create research: `clawpm research add --type investigation --title "Question"`
+2. Spawn subagent: Use `sessions_spawn` with the research task
+3. Link session: `clawpm research link --id <id> --session-key <key>`
+4. Check results: `sessions_history` or read the research file
 
-2. Spawn subagent via OpenClaw:
-   ```
-   sessions_spawn with task: "Research question..."
-   ```
+## Task States & File Locations
 
-3. Link the session to research:
-   ```bash
-   clawpm research link --project <id> --id <research_id> --session-key <child_session_key>
-   ```
-
-4. Later, check results via `sessions_history` or read the research file
-
-## Task States
-
-- **open** - `tasks/ID.md` - Ready to work on
-- **progress** - `tasks/ID.progress.md` - Currently being worked on
-- **done** - `tasks/done/ID.md` - Completed
-- **blocked** - `tasks/blocked/ID.md` - Waiting on something
+| State | File Pattern | Meaning |
+|-------|--------------|---------|
+| open | `tasks/CLAWP-042.md` | Ready to work |
+| progress | `tasks/CLAWP-042.progress.md` | In progress |
+| done | `tasks/done/CLAWP-042.md` | Completed |
+| blocked | `tasks/blocked/CLAWP-042.md` | Waiting |
 
 ## Work Log Actions
 
-- `start` - Started working on a task
-- `progress` - Made progress, continuing
-- `done` - Completed task
+- `start` - Started working
+- `progress` - Made progress
+- `done` - Completed
 - `blocked` - Hit a blocker
-- `pause` - Paused work (switching tasks/projects)
+- `pause` - Switching tasks
 - `research` - Research note
 - `note` - General observation
 
+## Tips
+
+- **JSON output**: All commands emit JSON by default; use `-f text` for human-readable
+- **Portfolio root**: Must be OUTSIDE OpenClaw workspace
+- **Work log**: Append-only at `~/clawpm/work_log.jsonl`
+- **Test changes**: When editing clawpm itself, test with `uv run clawpm ...` from the repo
+
 ## Troubleshooting
 
-- `clawpm doctor` - Check for issues
-- `clawpm log tail --project <id>` - See recent work history
-- `clawpm setup --check` - Verify installation
-
-## When Working on ClawPM Itself
-
-If you're fixing bugs or adding features to clawpm (project id: `clawpm`):
-
-1. Edit code in `~/Development/clawpm/src/clawpm/`
-2. Test with `clawpm <command>` (runs from source)
-3. Log issues: `clawpm issues add --project clawpm ...`
-4. **Commit your changes before marking task done**:
-   ```bash
-   git add <files>
-   git commit -m "fix/feat: description"
-   ```
-
-## Important Notes
-
-- Portfolio root must be OUTSIDE OpenClaw workspace (avoids recursion issues)
-- All output is JSON by default; use `--format text` for human-readable
-- Work log is append-only at `~/clawpm/work_log.jsonl`
+```bash
+clawpm doctor              # Check for issues
+clawpm setup --check       # Verify installation
+clawpm log tail            # See recent activity
+```

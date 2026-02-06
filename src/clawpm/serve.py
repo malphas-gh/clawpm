@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .discovery import load_portfolio_config, discover_projects, get_project
 from .tasks import list_tasks, change_task_state
-from .worklog import add_entry
+from .worklog import add_entry, tail_entries
 
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -115,5 +115,30 @@ def create_app() -> FastAPI:
             return {"success": True, "entry": entry.to_dict() if entry else None}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    @app.get("/api/worklog")
+    def api_worklog(project: str | None = None, limit: int = 10) -> list[dict]:
+        config = load_portfolio_config()
+        if not config:
+            return []
+        entries = tail_entries(config, project=project, limit=limit)
+        return [e.to_dict() for e in entries]
+
+    @app.get("/api/active-tasks")
+    def api_active_tasks() -> list[dict]:
+        config = load_portfolio_config()
+        if not config:
+            return []
+        from .models import TaskState
+        active = []
+        projects = discover_projects(config)
+        for proj in projects:
+            if not proj.project_dir:
+                continue
+            for state in [TaskState.OPEN, TaskState.PROGRESS]:
+                tasks = list_tasks(config, proj.id, state_filter=state)
+                for task in tasks:
+                    active.append({"project": proj.id, "project_name": proj.name, "task": task.to_dict()})
+        return active
 
     return app

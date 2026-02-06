@@ -73,12 +73,18 @@ pass_format = click.make_pass_decorator(OutputFormat, ensure=True)
     default="json",
     help="Output format (default: json)",
 )
+@click.option(
+    "--project", "-p",
+    "global_project",
+    help="Project ID (overrides auto-detection)",
+)
 @click.version_option(version=__version__)
 @click.pass_context
-def main(ctx: click.Context, format: str) -> None:
+def main(ctx: click.Context, format: str, global_project: str | None) -> None:
     """ClawPM - Filesystem-first multi-project manager."""
     ctx.ensure_object(dict)
     ctx.obj["format"] = OutputFormat(format)
+    ctx.obj["global_project"] = global_project
 
 
 def get_format(ctx: click.Context) -> OutputFormat:
@@ -101,10 +107,17 @@ def require_portfolio(ctx: click.Context):
 
 
 def require_project(ctx: click.Context, project_id: str | None, required: bool = True) -> tuple[str | None, str]:
-    """Resolve project from explicit arg, cwd, or context.
+    """Resolve project from explicit arg, global flag, cwd, or context.
     
     Returns (project_id, source). Exits with error if required and not found.
+    Priority: explicit arg > global --project flag > cwd > context
     """
+    # Check for global --project flag if no explicit arg
+    if not project_id:
+        project_id = ctx.obj.get("global_project")
+        if project_id:
+            return (project_id, "global")
+    
     resolved_id, source = resolve_project(project_id)
     
     if required and not resolved_id:

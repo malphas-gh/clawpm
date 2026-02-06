@@ -52,6 +52,47 @@
     </div>
 
     <div class="section">
+        <h2>Quick Add</h2>
+        <div id="quick-add">
+            <h3>New Task</h3>
+            <form id="task-form">
+                <select id="task-project" required></select>
+                <input type="text" id="task-title" placeholder="Task title" required>
+                <input type="number" id="task-priority" placeholder="Priority (1-5)" value="3" min="1" max="5">
+                <select id="task-complexity">
+                    <option value="s">Small</option>
+                    <option value="m" selected>Medium</option>
+                    <option value="l">Large</option>
+                    <option value="xl">Extra Large</option>
+                </select>
+                <textarea id="task-desc" placeholder="Description (optional)"></textarea>
+                <button type="submit">Add Task</button>
+            </form>
+
+            <h3>New Issue</h3>
+            <form id="issue-form">
+                <select id="issue-project" required></select>
+                <select id="issue-type">
+                    <option value="bug">Bug</option>
+                    <option value="ux">UX</option>
+                    <option value="docs">Docs</option>
+                    <option value="feature">Feature</option>
+                </select>
+                <select id="issue-severity">
+                    <option value="high">High</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="low">Low</option>
+                </select>
+                <input type="text" id="issue-command" placeholder="Command that triggered it (optional)">
+                <input type="text" id="issue-expected" placeholder="Expected result">
+                <input type="text" id="issue-actual" placeholder="Actual result">
+                <textarea id="issue-context" placeholder="Additional context"></textarea>
+                <button type="submit">Add Issue</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="section">
         <h2>Recent Activity</h2>
         <div id="worklog"><p class="empty">Loading...</p></div>
     </div>
@@ -184,6 +225,69 @@
                     <br><small>${new Date(e.ts).toLocaleString()}</small>
                 </div>
             `).join('');
+        });
+
+        // Populate project dropdowns and handle quick add forms
+        fetchData('/api/projects', data => {
+            const options = data.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            document.getElementById('task-project').innerHTML = options;
+            document.getElementById('issue-project').innerHTML = options;
+        });
+
+        document.getElementById('task-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const req = {
+                project: document.getElementById('task-project').value,
+                title: document.getElementById('task-title').value,
+                priority: parseInt(document.getElementById('task-priority').value),
+                complexity: document.getElementById('task-complexity').value,
+                description: document.getElementById('task-desc').value,
+            };
+            try {
+                const res = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(req)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Task created: ' + data.task.id);
+                    location.reload();
+                } else {
+                    alert('Failed: ' + (data.error || 'unknown'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        });
+
+        document.getElementById('issue-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const req = {
+                project: document.getElementById('issue-project').value,
+                type: document.getElementById('issue-type').value,
+                severity: document.getElementById('issue-severity').value,
+                command: document.getElementById('issue-command').value,
+                expected: document.getElementById('issue-expected').value,
+                actual: document.getElementById('issue-actual').value,
+                context: document.getElementById('issue-context').value,
+            };
+            try {
+                const res = await fetch('/api/issues', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(req)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Issue logged');
+                    location.reload();
+                } else {
+                    alert('Failed: ' + (data.error || 'unknown'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
         });
     </script>
 </body>

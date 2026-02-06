@@ -217,4 +217,78 @@ def create_app() -> FastAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    class CreateTaskRequest(BaseModel):
+        project: str
+        title: str
+        priority: int = 3
+        complexity: str = "m"
+        description: str = ""
+
+    @app.post("/api/tasks")
+    def api_create_task(req: CreateTaskRequest) -> dict:
+        config = load_portfolio_config()
+        if not config:
+            return {"error": "no_portfolio"}
+        from .models import TaskComplexity
+        from .tasks import add_task
+        try:
+            complexity = TaskComplexity(req.complexity) if req.complexity else TaskComplexity.M
+            task = add_task(
+                config,
+                project_id=req.project,
+                title=req.title,
+                priority=req.priority,
+                complexity=complexity,
+                description=req.description,
+            )
+            if task:
+                return {"success": True, "task": task.to_dict()}
+            return {"success": False, "error": "failed_to_create_task"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    class CreateIssueRequest(BaseModel):
+        project: str
+        type: str = "bug"
+        severity: str = "medium"
+        command: str = ""
+        expected: str = ""
+        actual: str = ""
+        context: str = ""
+
+    @app.post("/api/issues")
+    def api_create_issue(req: CreateIssueRequest) -> dict:
+        config = load_portfolio_config()
+        if not config:
+            return {"error": "no_portfolio"}
+        import json
+        from datetime import datetime, timezone
+        try:
+            project = get_project(config, req.project)
+            if not project or not project.project_dir:
+                return {"success": False, "error": "project_not_found"}
+
+            agent_dir = project.project_dir / ".agent"
+            agent_dir.mkdir(exist_ok=True)
+            issues_file = agent_dir / "issues.jsonl"
+
+            entry = {
+                "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "type": req.type,
+                "severity": req.severity,
+                "command": req.command or None,
+                "expected": req.expected or None,
+                "actual": req.actual or None,
+                "context": req.context or None,
+                "fixed": False,
+            }
+            entry = {k: v for k, v in entry.items() if v is not None}
+
+            with open(issues_file, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     return app

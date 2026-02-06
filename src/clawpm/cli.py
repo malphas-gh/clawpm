@@ -445,7 +445,10 @@ def tasks_state(ctx: click.Context, project_id: str, task_id: str, new_state: st
 @click.option("--priority", type=int, default=5, help="Priority (1-10, lower is higher)")
 @click.option("--complexity", "-c", type=click.Choice(["s", "m", "l", "xl"]), help="Complexity")
 @click.option("--depends", "-d", multiple=True, help="Dependencies (can specify multiple)")
-@click.option("--description", help="Task description")
+@click.option("--description", help="Task description (deprecated, use --body)")
+@click.option("--body", "-b", help="Task body content")
+@click.option("--body-file", type=click.Path(exists=True), help="Read body from file")
+@click.option("--stdin", "read_stdin", is_flag=True, help="Read body from stdin")
 @click.pass_context
 def tasks_add(
     ctx: click.Context,
@@ -456,10 +459,25 @@ def tasks_add(
     complexity: str | None,
     depends: tuple[str, ...],
     description: str | None,
+    body: str | None,
+    body_file: str | None,
+    read_stdin: bool,
 ) -> None:
     """Add a new task."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+
+    # Determine body content
+    task_body = ""
+    if body:
+        task_body = body
+    elif body_file:
+        task_body = Path(body_file).read_text()
+    elif read_stdin:
+        import sys
+        task_body = sys.stdin.read()
+    elif description:
+        task_body = description
 
     cmplx = TaskComplexity(complexity) if complexity else None
     deps = list(depends) if depends else None
@@ -472,7 +490,7 @@ def tasks_add(
         priority=priority,
         complexity=cmplx,
         depends=deps,
-        description=description or "",
+        description=task_body,
     )
 
     if not task:

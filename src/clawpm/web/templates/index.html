@@ -22,6 +22,9 @@
         #refresh { margin-bottom: 1rem; }
         .section { background: #fff; padding: 1rem; border-radius: 4px; margin: 1rem 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .empty { color: #999; font-style: italic; }
+        .response-form { margin-top: 0.5rem; padding: 0.5rem; background: #fff; border-radius: 3px; }
+        .response-form textarea { width: 100%; min-height: 60px; margin-bottom: 0.5rem; }
+        .response-form label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; }
     </style>
 </head>
 <body>
@@ -72,9 +75,36 @@
                 <div class="blocker">
                     <strong>${b.project}</strong>: ${b.task.title}
                     <br><small>${b.task.id} | Priority: ${b.task.priority}</small>
+                    <div class="response-form">
+                        <textarea id="response-${b.task.id}" placeholder="Add response..."></textarea>
+                        <label><input type="checkbox" id="unblock-${b.task.id}"> Unblock after response</label>
+                        <button onclick="submitResponse('${b.project}', '${b.task.id}')">Submit Response</button>
+                    </div>
                 </div>
             `).join('');
         });
+
+        async function submitResponse(project, taskId) {
+            const response = document.getElementById(`response-${taskId}`).value;
+            const unblock = document.getElementById(`unblock-${taskId}`).checked;
+            if (!response.trim()) return;
+
+            try {
+                const res = await fetch(`/api/tasks/${project}/${taskId}/respond`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({response, unblock})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Failed: ' + (data.error || 'unknown error'));
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
 
         // Load active tasks
         fetchData('/api/active-tasks', data => {

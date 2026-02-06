@@ -1,103 +1,187 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ClawPM Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    <style>
-        body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; background: #f9f9f9; }
-        h1 { border-bottom: 2px solid #333; margin-bottom: 0.5rem; }
-        h2 { margin-top: 2rem; color: #444; }
-        .subtitle { color: #666; margin-bottom: 1.5rem; }
-        .project { padding: 1rem; margin: 0.5rem 0; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .project h3 { margin-top: 0; margin-bottom: 0.5rem; }
-        .project-meta { color: #666; font-size: 0.9rem; }
-        .blocker { background: #fee; border-left: 4px solid #c00; padding: 0.75rem 1rem; margin: 0.5rem 0; border-radius: 0 4px 4px 0; }
-        .task { padding: 0.5rem; margin: 0.25rem 0; background: #f0f0f0; border-radius: 3px; }
-        .task-progress { border-left: 3px solid #06c; padding-left: 0.5rem; }
-        .log-entry { padding: 0.5rem 0; border-bottom: 1px solid #eee; font-size: 0.9rem; }
-        .log-entry:last-child { border-bottom: none; }
-        button { padding: 0.5rem 1rem; cursor: pointer; background: #333; color: white; border: none; border-radius: 4px; }
-        button:hover { background: #555; }
-        #refresh { margin-bottom: 1rem; }
-        .section { background: #fff; padding: 1rem; border-radius: 4px; margin: 1rem 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .empty { color: #999; font-style: italic; }
-        .response-form { margin-top: 0.5rem; padding: 0.5rem; background: #fff; border-radius: 3px; }
-        .response-form textarea { width: 100%; min-height: 60px; margin-bottom: 0.5rem; }
-        .response-form label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; }
-        .project-paused { opacity: 0.6; background: #f5f5f5; }
-        .project-actions { margin-top: 0.5rem; }
-        .project-actions button { font-size: 0.85rem; padding: 0.25rem 0.5rem; margin-right: 0.5rem; }
-    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        claw: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
-    <h1>ClawPM Dashboard</h1>
-    <p class="subtitle">Multi-project task management</p>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 border-b-2 border-gray-800 pb-2">ClawPM Dashboard</h1>
+            <p class="text-gray-500 mt-2">Multi-project task management</p>
+        </header>
 
-    <button id="refresh" onclick="location.reload()">Refresh</button>
+        <!-- Refresh -->
+        <button id="refresh" onclick="location.reload()" 
+                class="mb-6 px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition-colors text-sm font-medium">
+            ↻ Refresh
+        </button>
 
-    <div class="section">
-        <h2>Blockers (Needs Attention)</h2>
-        <div id="blockers"><p class="empty">Loading...</p></div>
+        <!-- Blockers -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 bg-red-500 rounded-full"></span>
+                Blockers
+            </h2>
+            <div id="blockers">
+                <p class="text-gray-400 italic">Loading...</p>
+            </div>
+        </section>
+
+        <!-- Active Tasks -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+                Active Tasks
+            </h2>
+            <div id="active-tasks">
+                <p class="text-gray-400 italic">Loading...</p>
+            </div>
+        </section>
+
+        <!-- Projects -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                Projects
+            </h2>
+            <div id="projects">
+                <p class="text-gray-400 italic">Loading...</p>
+            </div>
+        </section>
+
+        <!-- Quick Add -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Quick Add</h2>
+            <div id="quick-add" class="grid md:grid-cols-2 gap-6">
+                <!-- Task Form -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">New Task</h3>
+                    <form id="task-form" class="space-y-3">
+                        <select id="task-project" required
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent"></select>
+                        <input type="text" id="task-title" placeholder="Task title" required
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent">
+                        <div class="flex gap-2">
+                            <input type="number" id="task-priority" placeholder="Priority" value="3" min="1" max="5"
+                                   class="w-24 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent">
+                            <select id="task-complexity"
+                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent">
+                                <option value="s">Small</option>
+                                <option value="m" selected>Medium</option>
+                                <option value="l">Large</option>
+                                <option value="xl">Extra Large</option>
+                            </select>
+                        </div>
+                        <textarea id="task-desc" placeholder="Description (optional)" rows="2"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent"></textarea>
+                        <button type="submit"
+                                class="w-full px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition-colors text-sm font-medium">
+                            Add Task
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Issue Form -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">New Issue</h3>
+                    <form id="issue-form" class="space-y-3">
+                        <select id="issue-project" required
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent"></select>
+                        <div class="flex gap-2">
+                            <select id="issue-type"
+                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent">
+                                <option value="bug">Bug</option>
+                                <option value="ux">UX</option>
+                                <option value="docs">Docs</option>
+                                <option value="feature">Feature</option>
+                            </select>
+                            <select id="issue-severity"
+                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent">
+                                <option value="high">High</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                        <input type="text" id="issue-command" placeholder="Command (optional)"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent">
+                        <input type="text" id="issue-expected" placeholder="Expected result"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent">
+                        <input type="text" id="issue-actual" placeholder="Actual result"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent">
+                        <textarea id="issue-context" placeholder="Additional context" rows="2"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-claw-500 focus:border-transparent"></textarea>
+                        <button type="submit"
+                                class="w-full px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition-colors text-sm font-medium">
+                            Add Issue
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recent Activity -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 bg-purple-500 rounded-full"></span>
+                Recent Activity
+            </h2>
+            <div id="worklog">
+                <p class="text-gray-400 italic">Loading...</p>
+            </div>
+        </section>
     </div>
 
-    <div class="section">
-        <h2>Active Tasks</h2>
-        <div id="active-tasks"><p class="empty">Loading...</p></div>
-    </div>
-
-    <div class="section">
-        <h2>Projects</h2>
-        <div id="projects"><p class="empty">Loading...</p></div>
-    </div>
-
-    <div class="section">
-        <h2>Quick Add</h2>
-        <div id="quick-add">
-            <h3>New Task</h3>
-            <form id="task-form">
-                <select id="task-project" required></select>
-                <input type="text" id="task-title" placeholder="Task title" required>
-                <input type="number" id="task-priority" placeholder="Priority (1-5)" value="3" min="1" max="5">
-                <select id="task-complexity">
-                    <option value="s">Small</option>
-                    <option value="m" selected>Medium</option>
-                    <option value="l">Large</option>
-                    <option value="xl">Extra Large</option>
-                </select>
-                <textarea id="task-desc" placeholder="Description (optional)"></textarea>
-                <button type="submit">Add Task</button>
-            </form>
-
-            <h3>New Issue</h3>
-            <form id="issue-form">
-                <select id="issue-project" required></select>
-                <select id="issue-type">
-                    <option value="bug">Bug</option>
-                    <option value="ux">UX</option>
-                    <option value="docs">Docs</option>
-                    <option value="feature">Feature</option>
-                </select>
-                <select id="issue-severity">
-                    <option value="high">High</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="low">Low</option>
-                </select>
-                <input type="text" id="issue-command" placeholder="Command that triggered it (optional)">
-                <input type="text" id="issue-expected" placeholder="Expected result">
-                <input type="text" id="issue-actual" placeholder="Actual result">
-                <textarea id="issue-context" placeholder="Additional context"></textarea>
-                <button type="submit">Add Issue</button>
-            </form>
-        </div>
-    </div>
-
-    <div class="section">
-        <h2>Recent Activity</h2>
-        <div id="worklog"><p class="empty">Loading...</p></div>
-    </div>
+    <!-- Toast container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
 
     <script>
+        // Toast notification system
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-green-600',
+                error: 'bg-red-600',
+                info: 'bg-gray-800'
+            };
+            toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg text-sm max-w-sm transform transition-all duration-300 translate-x-full`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            
+            // Animate in
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-x-full');
+            });
+            
+            // Remove after 3s
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
         async function fetchData(url, handler) {
             try {
                 const res = await fetch(url);
@@ -108,21 +192,48 @@
             }
         }
 
+        // State badge helper
+        function stateBadge(state) {
+            const badges = {
+                open: 'bg-gray-100 text-gray-700',
+                progress: 'bg-blue-100 text-blue-700',
+                blocked: 'bg-red-100 text-red-700',
+                done: 'bg-green-100 text-green-700'
+            };
+            return `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${badges[state] || badges.open}">${state}</span>`;
+        }
+
         // Load blockers
         fetchData('/api/blockers', data => {
             const el = document.getElementById('blockers');
             if (!data.length) {
-                el.innerHTML = '<p class="empty">No blockers 🎉</p>';
+                el.innerHTML = '<p class="text-green-600 font-medium">No blockers 🎉</p>';
                 return;
             }
             el.innerHTML = data.map(b => `
-                <div class="blocker">
-                    <strong>${b.project}</strong>: ${b.task.title}
-                    <br><small>${b.task.id} | Priority: ${b.task.priority}</small>
-                    <div class="response-form">
-                        <textarea id="response-${b.task.id}" placeholder="Add response..."></textarea>
-                        <label><input type="checkbox" id="unblock-${b.task.id}"> Unblock after response</label>
-                        <button onclick="submitResponse('${b.project}', '${b.task.id}')">Submit Response</button>
+                <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-md mb-3">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="font-semibold text-gray-900">${b.project}</span>
+                            <span class="text-gray-600">→</span>
+                            <span class="text-gray-800">${b.task.title}</span>
+                        </div>
+                        ${stateBadge('blocked')}
+                    </div>
+                    <p class="text-sm text-gray-500 mt-1">${b.task.id} · Priority ${b.task.priority}</p>
+                    <div class="mt-3 space-y-2">
+                        <textarea id="response-${b.task.id}" placeholder="Add response..." rows="2"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"></textarea>
+                        <div class="flex items-center justify-between">
+                            <label class="flex items-center gap-2 text-sm text-gray-600">
+                                <input type="checkbox" id="unblock-${b.task.id}" class="rounded border-gray-300 text-red-600 focus:ring-red-500">
+                                Unblock after response
+                            </label>
+                            <button onclick="submitResponse('${b.project}', '${b.task.id}')"
+                                    class="px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium">
+                                Submit
+                            </button>
+                        </div>
                     </div>
                 </div>
             `).join('');
@@ -141,12 +252,13 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    location.reload();
+                    showToast('Response submitted', 'success');
+                    setTimeout(() => location.reload(), 500);
                 } else {
-                    alert('Failed: ' + (data.error || 'unknown error'));
+                    showToast('Failed: ' + (data.error || 'unknown error'), 'error');
                 }
             } catch (err) {
-                alert('Error: ' + err.message);
+                showToast('Error: ' + err.message, 'error');
             }
         }
 
@@ -154,13 +266,18 @@
         fetchData('/api/active-tasks', data => {
             const el = document.getElementById('active-tasks');
             if (!data.length) {
-                el.innerHTML = '<p class="empty">No active tasks</p>';
+                el.innerHTML = '<p class="text-gray-400 italic">No active tasks</p>';
                 return;
             }
             el.innerHTML = data.map(t => `
-                <div class="task ${t.task.state === 'progress' ? 'task-progress' : ''}">
-                    <strong>${t.project_name}</strong>: ${t.task.title}
-                    <br><small>${t.task.id} | ${t.task.state} | Priority: ${t.task.priority}</small>
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md mb-2 ${t.task.state === 'progress' ? 'border-l-4 border-blue-500' : ''}">
+                    <div>
+                        <span class="font-medium text-gray-700">${t.project_name}</span>
+                        <span class="text-gray-400 mx-1">→</span>
+                        <span class="text-gray-900">${t.task.title}</span>
+                        <p class="text-sm text-gray-500 mt-0.5">${t.task.id} · Priority ${t.task.priority}</p>
+                    </div>
+                    ${stateBadge(t.task.state)}
                 </div>
             `).join('');
         });
@@ -169,20 +286,25 @@
         fetchData('/api/projects', data => {
             const el = document.getElementById('projects');
             if (!data.length) {
-                el.innerHTML = '<p class="empty">No projects found</p>';
+                el.innerHTML = '<p class="text-gray-400 italic">No projects found</p>';
                 return;
             }
             el.innerHTML = data.map(p => `
-                <div class="project ${p.status === 'paused' ? 'project-paused' : ''}">
-                    <h3>${p.name}</h3>
-                    <div class="project-meta">
-                        Status: ${p.status} | Priority: ${p.priority} | Labels: ${p.labels.join(', ') || 'none'}
+                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-md mb-2 ${p.status === 'paused' ? 'opacity-60' : ''}">
+                    <div>
+                        <h3 class="font-semibold text-gray-900">${p.name}</h3>
+                        <p class="text-sm text-gray-500 mt-0.5">
+                            Priority ${p.priority} · ${p.labels.length ? p.labels.join(', ') : 'No labels'}
+                        </p>
                     </div>
-                    <div class="project-actions">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${p.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}">
+                            ${p.status}
+                        </span>
                         ${p.status === 'active' ?
-                            `<button onclick="pauseProject('${p.id}')">Pause</button>` :
+                            `<button onclick="pauseProject('${p.id}')" class="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">Pause</button>` :
                             p.status === 'paused' ?
-                            `<button onclick="resumeProject('${p.id}')">Resume</button>` : ''}
+                            `<button onclick="resumeProject('${p.id}')" class="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors">Resume</button>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -192,10 +314,14 @@
             try {
                 const res = await fetch(`/api/projects/${projectId}/pause`, {method: 'POST'});
                 const data = await res.json();
-                if (data.success) location.reload();
-                else alert('Failed: ' + (data.error || 'unknown'));
+                if (data.success) {
+                    showToast('Project paused', 'info');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    showToast('Failed: ' + (data.error || 'unknown'), 'error');
+                }
             } catch (err) {
-                alert('Error: ' + err.message);
+                showToast('Error: ' + err.message, 'error');
             }
         }
 
@@ -203,10 +329,14 @@
             try {
                 const res = await fetch(`/api/projects/${projectId}/resume`, {method: 'POST'});
                 const data = await res.json();
-                if (data.success) location.reload();
-                else alert('Failed: ' + (data.error || 'unknown'));
+                if (data.success) {
+                    showToast('Project resumed', 'success');
+                    setTimeout(() => location.reload(), 500);
+                } else {
+                    showToast('Failed: ' + (data.error || 'unknown'), 'error');
+                }
             } catch (err) {
-                alert('Error: ' + err.message);
+                showToast('Error: ' + err.message, 'error');
             }
         }
 
@@ -214,17 +344,21 @@
         fetchData('/api/worklog?limit=10', data => {
             const el = document.getElementById('worklog');
             if (!data.length) {
-                el.innerHTML = '<p class="empty">No recent activity</p>';
+                el.innerHTML = '<p class="text-gray-400 italic">No recent activity</p>';
                 return;
             }
-            el.innerHTML = data.map(e => `
-                <div class="log-entry">
-                    <strong>${e.project}</strong>
-                    ${e.task ? '(' + e.task + ')' : ''}
-                    - ${e.action}: ${e.summary || '(no summary)'}
-                    <br><small>${new Date(e.ts).toLocaleString()}</small>
+            el.innerHTML = `<div class="divide-y divide-gray-100">${data.map(e => `
+                <div class="py-3">
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="font-medium text-gray-900">${e.project}</span>
+                        ${e.task ? `<span class="text-gray-400">·</span><span class="text-gray-600">${e.task}</span>` : ''}
+                        <span class="text-gray-400">·</span>
+                        <span class="text-purple-600 font-medium">${e.action}</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-0.5">${e.summary || '(no summary)'}</p>
+                    <p class="text-xs text-gray-400 mt-1">${new Date(e.ts).toLocaleString()}</p>
                 </div>
-            `).join('');
+            `).join('')}</div>`;
         });
 
         // Populate project dropdowns and handle quick add forms
@@ -251,13 +385,14 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('Task created: ' + data.task.id);
-                    location.reload();
+                    showToast('Task created: ' + data.task.id, 'success');
+                    document.getElementById('task-form').reset();
+                    setTimeout(() => location.reload(), 500);
                 } else {
-                    alert('Failed: ' + (data.error || 'unknown'));
+                    showToast('Failed: ' + (data.error || 'unknown'), 'error');
                 }
             } catch (err) {
-                alert('Error: ' + err.message);
+                showToast('Error: ' + err.message, 'error');
             }
         });
 
@@ -280,13 +415,14 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('Issue logged');
-                    location.reload();
+                    showToast('Issue logged', 'success');
+                    document.getElementById('issue-form').reset();
+                    setTimeout(() => location.reload(), 500);
                 } else {
-                    alert('Failed: ' + (data.error || 'unknown'));
+                    showToast('Failed: ' + (data.error || 'unknown'), 'error');
                 }
             } catch (err) {
-                alert('Error: ' + err.message);
+                showToast('Error: ' + err.message, 'error');
             }
         });
     </script>

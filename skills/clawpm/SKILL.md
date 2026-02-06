@@ -61,6 +61,34 @@ You can use just the numeric part of a task ID:
 - `42` → `CLAWP-042` (prefix derived from project ID)
 - `CLAWP-042` → `CLAWP-042` (full ID works too)
 
+## Setting Up a New Project
+
+### From an Existing Git Repo
+
+```bash
+cd /path/to/my-repo
+clawpm project init                    # Auto-detects ID/name from directory
+clawpm project init --id myproj        # Custom ID
+clawpm project init --name "My Project" # Custom name
+```
+
+This creates `.project/` inside the repo with:
+- `settings.toml` - Project config
+- `SPEC.md` - Project specification template
+- `tasks/` - Task storage
+- `learnings.md` - Running notes
+- `research/`, `notes/` - Research storage
+
+The repo is immediately tracked by ClawPM - `clawpm status` works from that directory.
+
+### From Outside the Repo
+
+```bash
+clawpm project init --in-repo /path/to/repo
+# or
+clawpm project init -r /path/to/repo
+```
+
 ## Web Dashboard
 
 ```bash

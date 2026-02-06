@@ -179,4 +179,42 @@ def create_app() -> FastAPI:
                     active.append({"project": proj.id, "project_name": proj.name, "task": task.to_dict()})
         return active
 
+    @app.post("/api/projects/{project_id}/pause")
+    def api_pause_project(project_id: str) -> dict:
+        config = load_portfolio_config()
+        if not config:
+            return {"error": "no_portfolio"}
+        try:
+            project = get_project(config, project_id)
+            if not project or not project.project_dir:
+                return {"success": False, "error": "project_not_found"}
+
+            settings_path = project.project_dir / ".project" / "settings.toml"
+            content = settings_path.read_text()
+            content = content.replace('status = "active"', 'status = "paused"')
+            settings_path.write_text(content)
+
+            return {"success": True, "status": "paused"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @app.post("/api/projects/{project_id}/resume")
+    def api_resume_project(project_id: str) -> dict:
+        config = load_portfolio_config()
+        if not config:
+            return {"error": "no_portfolio"}
+        try:
+            project = get_project(config, project_id)
+            if not project or not project.project_dir:
+                return {"success": False, "error": "project_not_found"}
+
+            settings_path = project.project_dir / ".project" / "settings.toml"
+            content = settings_path.read_text()
+            content = content.replace('status = "paused"', 'status = "active"')
+            settings_path.write_text(content)
+
+            return {"success": True, "status": "active"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     return app

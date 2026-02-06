@@ -25,6 +25,9 @@
         .response-form { margin-top: 0.5rem; padding: 0.5rem; background: #fff; border-radius: 3px; }
         .response-form textarea { width: 100%; min-height: 60px; margin-bottom: 0.5rem; }
         .response-form label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; }
+        .project-paused { opacity: 0.6; background: #f5f5f5; }
+        .project-actions { margin-top: 0.5rem; }
+        .project-actions button { font-size: 0.85rem; padding: 0.25rem 0.5rem; margin-right: 0.5rem; }
     </style>
 </head>
 <body>
@@ -129,14 +132,42 @@
                 return;
             }
             el.innerHTML = data.map(p => `
-                <div class="project">
+                <div class="project ${p.status === 'paused' ? 'project-paused' : ''}">
                     <h3>${p.name}</h3>
                     <div class="project-meta">
-                        Status: ${p.status} | Priority: ${p.priority}丨 Labels: ${p.labels.join(', ') || 'none'}
+                        Status: ${p.status} | Priority: ${p.priority} | Labels: ${p.labels.join(', ') || 'none'}
+                    </div>
+                    <div class="project-actions">
+                        ${p.status === 'active' ?
+                            `<button onclick="pauseProject('${p.id}')">Pause</button>` :
+                            p.status === 'paused' ?
+                            `<button onclick="resumeProject('${p.id}')">Resume</button>` : ''}
                     </div>
                 </div>
             `).join('');
         });
+
+        async function pauseProject(projectId) {
+            try {
+                const res = await fetch(`/api/projects/${projectId}/pause`, {method: 'POST'});
+                const data = await res.json();
+                if (data.success) location.reload();
+                else alert('Failed: ' + (data.error || 'unknown'));
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function resumeProject(projectId) {
+            try {
+                const res = await fetch(`/api/projects/${projectId}/resume`, {method: 'POST'});
+                const data = await res.json();
+                if (data.success) location.reload();
+                else alert('Failed: ' + (data.error || 'unknown'));
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
 
         // Load work log
         fetchData('/api/worklog?limit=10', data => {

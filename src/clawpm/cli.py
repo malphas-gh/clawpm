@@ -332,7 +332,7 @@ def project_init(ctx: click.Context, repo_path: str, project_id: str | None, pro
     project_dir = repo / ".project"
 
     if project_dir.exists():
-        output_error("project_exists", f"Project already exists at {project_dir}", fmt=fmt)
+        output_error("project_exists", f"Project already exists at {project_dir} (repo: {repo})", fmt=fmt)
         sys.exit(1)
 
     # Generate defaults

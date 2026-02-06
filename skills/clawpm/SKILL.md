@@ -38,16 +38,21 @@ clawpm status              # Now uses my-project
 
 ## Project Auto-Detection
 
-ClawPM automatically detects your project from:
-1. **Explicit flag**: `--project clawpm` (highest priority)
-2. **Current directory**: Walks up looking for `.project/settings.toml`
-3. **Context**: Previously set with `clawpm use <project>`
+ClawPM automatically detects your project from (in priority order):
+1. **Subcommand flag**: `clawpm tasks list --project clawpm`
+2. **Global flag**: `clawpm --project clawpm status` (works from anywhere)
+3. **Current directory**: Walks up looking for `.project/settings.toml`
+4. **Context**: Previously set with `clawpm use <project>`
 
-This means most commands work without specifying `--project`:
 ```bash
+# From project directory - auto-detects:
 cd ~/Development/clawpm
-clawpm tasks list          # Lists clawpm tasks automatically
+clawpm status              # Uses clawpm automatically
 clawpm done 30             # Marks CLAWP-030 done
+
+# From anywhere - use global flag:
+clawpm -p clawpm status
+clawpm --project clawpm done 30
 ```
 
 ## Short Task IDs

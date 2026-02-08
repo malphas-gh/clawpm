@@ -175,9 +175,11 @@ class Task:
         text = path.read_text()
 
         # Determine state from filename/location
-        if path.parent.name == "done":
+        # Check path components for done/blocked (handles both regular files and task directories)
+        path_parts = path.parts
+        if "done" in path_parts:
             state = TaskState.DONE
-        elif path.parent.name == "blocked":
+        elif "blocked" in path_parts:
             state = TaskState.BLOCKED
         elif ".progress" in path.name:
             state = TaskState.PROGRESS

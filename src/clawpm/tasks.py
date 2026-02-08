@@ -22,6 +22,43 @@ def get_tasks_dir(config: PortfolioConfig, project_id: str) -> Path | None:
     return None
 
 
+def _scan_task_files(location: Path, tasks: list[Task], state_filter: TaskState | None) -> None:
+    """Scan a directory for task files (both .md files and task directories)."""
+    if not location.exists():
+        return
+
+    for item in location.iterdir():
+        if item.is_file() and item.suffix == ".md":
+            # Regular task file
+            try:
+                task = Task.from_file(item)
+                if state_filter is None or task.state == state_filter:
+                    tasks.append(task)
+            except Exception:
+                continue
+        elif item.is_dir() and not item.name.startswith(".") and item.name not in ("done", "blocked"):
+            # Task directory - check for _task.md (parent) and subtasks
+            parent_file = item / "_task.md"
+            if parent_file.exists():
+                try:
+                    parent_task = Task.from_file(parent_file)
+                    if state_filter is None or parent_task.state == state_filter:
+                        tasks.append(parent_task)
+                except Exception:
+                    continue
+
+            # Scan for subtasks in the directory
+            for subtask_file in item.glob("*.md"):
+                if subtask_file.name == "_task.md":
+                    continue
+                try:
+                    subtask = Task.from_file(subtask_file)
+                    if state_filter is None or subtask.state == state_filter:
+                        tasks.append(subtask)
+                except Exception:
+                    continue
+
+
 def list_tasks(
     config: PortfolioConfig,
     project_id: str,
@@ -36,27 +73,21 @@ def list_tasks(
 
     # Collect tasks from all locations
     locations = [
-        (tasks_dir, None),  # Main dir - open or progress
-        (tasks_dir / "done", TaskState.DONE),
-        (tasks_dir / "blocked", TaskState.BLOCKED),
+        tasks_dir,  # Main dir - open or progress
+        tasks_dir / "done",
+        tasks_dir / "blocked",
     ]
 
-    for location, forced_state in locations:
-        if not location.exists():
-            continue
+    for location in locations:
+        _scan_task_files(location, tasks, state_filter)
 
-        for file in location.glob("*.md"):
-            try:
-                task = Task.from_file(file)
-
-                # Apply state filter
-                if state_filter is not None and task.state != state_filter:
-                    continue
-
-                tasks.append(task)
-            except Exception:
-                # Skip malformed tasks
-                continue
+    # Build parent-child relationships
+    task_map = {t.id: t for t in tasks}
+    for task in tasks:
+        if task.parent and task.parent in task_map:
+            parent = task_map[task.parent]
+            if task.id not in parent.children:
+                parent.children.append(task.id)
 
     # Sort by priority (lower is higher), then by ID
     tasks.sort(key=lambda t: (t.priority, t.id))
@@ -70,18 +101,52 @@ def get_task(config: PortfolioConfig, project_id: str, task_id: str) -> Task | N
     if not tasks_dir:
         return None
 
+    # Extract parent ID from subtask ID (e.g., CLAWP-TEST-001 -> CLAWP-TEST)
+    # Subtask IDs have format: PARENT-NNN where NNN is numeric
+    parent_id = None
+    if "-" in task_id:
+        parts = task_id.rsplit("-", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            parent_id = parts[0]
+
     # Check all possible locations and filenames
     possible_paths = [
+        # Regular task files
         tasks_dir / f"{task_id}.md",
         tasks_dir / f"{task_id}.progress.md",
         tasks_dir / "done" / f"{task_id}.md",
         tasks_dir / "blocked" / f"{task_id}.md",
+        # Task directories (parent tasks)
+        tasks_dir / task_id / "_task.md",
+        tasks_dir / "done" / task_id / "_task.md",
+        tasks_dir / "blocked" / task_id / "_task.md",
     ]
+
+    # Add subtask paths if this looks like a subtask ID
+    if parent_id:
+        possible_paths.extend([
+            tasks_dir / parent_id / f"{task_id}.md",
+            tasks_dir / parent_id / f"{task_id}.progress.md",
+            tasks_dir / "done" / parent_id / f"{task_id}.md",
+            tasks_dir / "blocked" / parent_id / f"{task_id}.md",
+        ])
 
     for path in possible_paths:
         if path.exists():
             try:
-                return Task.from_file(path)
+                task = Task.from_file(path)
+                # Populate children if this is a parent task
+                if task.is_parent:
+                    task_dir = path.parent
+                    for subtask_file in task_dir.glob("*.md"):
+                        if subtask_file.name != "_task.md":
+                            try:
+                                subtask = Task.from_file(subtask_file)
+                                if subtask.id not in task.children:
+                                    task.children.append(subtask.id)
+                            except Exception:
+                                continue
+                return task
             except Exception:
                 continue
 

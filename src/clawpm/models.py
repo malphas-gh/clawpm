@@ -154,9 +154,20 @@ class Task:
     complexity: TaskComplexity | None = None
     depends: list[str] = field(default_factory=list)
     parent: str | None = None
+    children: list[str] = field(default_factory=list)  # Populated by discovery
     created: str | None = None
     content: str = ""
     file_path: Path | None = None
+
+    @property
+    def is_parent(self) -> bool:
+        """True if this task has subtasks or is stored as a directory."""
+        if self.children:
+            return True
+        # Check if stored as directory (has _task.md)
+        if self.file_path and self.file_path.name == "_task.md":
+            return True
+        return False
 
     @classmethod
     def from_file(cls, path: Path) -> Task:
@@ -223,6 +234,8 @@ class Task:
             "complexity": self.complexity.value if self.complexity else None,
             "depends": self.depends,
             "parent": self.parent,
+            "children": self.children,
+            "is_parent": self.is_parent,
             "created": self.created,
             "file_path": str(self.file_path) if self.file_path else None,
         }

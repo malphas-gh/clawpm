@@ -485,8 +485,9 @@ def tasks() -> None:
     default="all",
     help="Filter by state",
 )
+@click.option("--flat", is_flag=True, help="Show flat list without hierarchy")
 @click.pass_context
-def tasks_list(ctx: click.Context, project_id: str | None, state: str) -> None:
+def tasks_list(ctx: click.Context, project_id: str | None, state: str, flat: bool) -> None:
     """List tasks for a project."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
@@ -496,7 +497,7 @@ def tasks_list(ctx: click.Context, project_id: str | None, state: str) -> None:
     state_filter = None if state == "all" else TaskState(state)
     found_tasks = list_tasks(config, project_id, state_filter=state_filter)
 
-    output_tasks_list(found_tasks, fmt=fmt)
+    output_tasks_list(found_tasks, fmt=fmt, flat=flat)
 
 
 @tasks.command("show")

@@ -110,8 +110,14 @@ def output_projects_list(projects: list[Any], fmt: OutputFormat = OutputFormat.J
         console.print(table)
 
 
-def output_tasks_list(tasks: list[Any], fmt: OutputFormat = OutputFormat.JSON) -> None:
-    """Output a list of tasks."""
+def output_tasks_list(tasks: list[Any], fmt: OutputFormat = OutputFormat.JSON, flat: bool = False) -> None:
+    """Output a list of tasks.
+    
+    Args:
+        tasks: List of Task objects
+        fmt: Output format (JSON or TEXT)
+        flat: If True, show flat list without hierarchy (text mode only)
+    """
     if fmt == OutputFormat.JSON:
         output_json([t.to_dict() for t in tasks])
     else:
@@ -119,32 +125,44 @@ def output_tasks_list(tasks: list[Any], fmt: OutputFormat = OutputFormat.JSON) -
             console.print("[dim]No tasks found[/dim]")
             return
 
-        table = Table(title="Tasks")
-        table.add_column("ID", style="cyan")
-        table.add_column("Title")
-        table.add_column("State")
-        table.add_column("Pri", justify="right")
-        table.add_column("Cmplx")
-        table.add_column("Depends")
+        # Build task map for hierarchy
+        task_map = {t.id: t for t in tasks}
+        
+        # Identify which tasks to show at top level
+        # (tasks without parents, or whose parents aren't in the list)
+        if flat:
+            top_level = tasks
+        else:
+            top_level = [t for t in tasks if not t.parent or t.parent not in task_map]
 
-        for t in tasks:
-            state_color = {
+        def _state_color(state_val: str) -> str:
+            return {
                 "open": "white",
                 "progress": "yellow",
                 "done": "green",
                 "blocked": "red",
-            }.get(t.state.value, "white")
+            }.get(state_val, "white")
 
-            table.add_row(
-                t.id,
-                t.title[:50] + "..." if len(t.title) > 50 else t.title,
-                f"[{state_color}]{t.state.value}[/{state_color}]",
-                str(t.priority),
-                t.complexity.value if t.complexity else "-",
-                ", ".join(t.depends) if t.depends else "-",
+        def _print_task(t: Any, indent: str = "") -> None:
+            state_color = _state_color(t.state.value)
+            title = t.title[:45] + "..." if len(t.title) > 45 else t.title
+            cmplx = f" \\[{t.complexity.value}]" if t.complexity else ""
+            parent_marker = " [dim]↳[/dim]" if t.parent else ""
+            
+            console.print(
+                f"{indent}[cyan]{t.id}[/cyan]{parent_marker} "
+                f"[{state_color}]\\[{t.state.value}][/{state_color}] "
+                f"P{t.priority}{cmplx} {title}"
             )
 
-        console.print(table)
+        for t in top_level:
+            _print_task(t)
+            
+            # Print children if not flat and task has children
+            if not flat and t.children:
+                for child_id in t.children:
+                    if child_id in task_map:
+                        _print_task(task_map[child_id], indent="  └─ ")
 
 
 def output_task_detail(task: Any, fmt: OutputFormat = OutputFormat.JSON) -> None:

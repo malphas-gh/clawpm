@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -809,6 +810,23 @@ def log_add(
     # Expand task ID if provided
     if task_id:
         task_id = expand_task_id(task_id, project_id)
+
+    # Auto-detect changed files from git if not manually specified
+    if not files and project_id:
+        project = get_project(config, project_id)
+        if project and project.repo_path and project.repo_path.exists():
+            try:
+                result = subprocess.run(
+                    ["git", "diff", "--name-only", "HEAD"],
+                    cwd=project.repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    files = tuple(f for f in result.stdout.strip().split('\n') if f)
+            except Exception:
+                pass  # No git or error - continue without files_changed
 
     entry = add_entry(
         config,

@@ -490,7 +490,7 @@ def tasks() -> None:
 @click.option("--flat", is_flag=True, help="Show flat list without hierarchy")
 @click.pass_context
 def tasks_list(ctx: click.Context, project_id: str | None, state: str, flat: bool) -> None:
-    """List tasks for a project."""
+    """List tasks for a project (filter with -s open|progress|done|blocked)."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
     

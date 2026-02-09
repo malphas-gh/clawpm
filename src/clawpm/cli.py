@@ -527,8 +527,9 @@ def tasks_show(ctx: click.Context, project_id: str | None, task_id: str) -> None
 @click.argument("task_id")
 @click.argument("new_state", type=click.Choice(["open", "progress", "done", "blocked"]))
 @click.option("--note", "-n", help="Note about the state change")
+@click.option("--force", "-f", is_flag=True, help="Force completion even if subtasks incomplete")
 @click.pass_context
-def tasks_state(ctx: click.Context, project_id: str | None, task_id: str, new_state: str, note: str | None) -> None:
+def tasks_state(ctx: click.Context, project_id: str | None, task_id: str, new_state: str, note: str | None, force: bool) -> None:
     """Change task state."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
@@ -537,7 +538,25 @@ def tasks_state(ctx: click.Context, project_id: str | None, task_id: str, new_st
     task_id = expand_task_id(task_id, project_id)
 
     state = TaskState(new_state)
-    task = change_task_state(config, project_id, task_id, state, note=note)
+    
+    # Check for incomplete subtasks before attempting state change
+    if state == TaskState.DONE and not force:
+        task = get_task(config, project_id, task_id)
+        if task and task.children:
+            incomplete = []
+            for child_id in task.children:
+                child = get_task(config, project_id, child_id)
+                if child and child.state != TaskState.DONE:
+                    incomplete.append(f"{child_id} [{child.state.value}]")
+            if incomplete:
+                output_error(
+                    "subtasks_incomplete",
+                    f"Cannot complete {task_id} - subtasks incomplete:\n  " + "\n  ".join(incomplete) + "\nUse --force to complete anyway.",
+                    fmt=fmt,
+                )
+                sys.exit(1)
+    
+    task = change_task_state(config, project_id, task_id, state, note=note, force=force)
 
     if not task:
         output_error("task_not_found", f"No task with id '{task_id}' in project '{project_id}'", fmt=fmt)
@@ -667,10 +686,11 @@ def quick_add(ctx: click.Context, project_id: str | None, title: str, priority: 
 @click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
 @click.argument("task_id")
 @click.option("--note", "-n", help="Completion note")
+@click.option("--force", "-f", is_flag=True, help="Force completion even if subtasks incomplete")
 @click.pass_context
-def quick_done(ctx: click.Context, project_id: str | None, task_id: str, note: str | None) -> None:
+def quick_done(ctx: click.Context, project_id: str | None, task_id: str, note: str | None, force: bool) -> None:
     """Mark a task as done (alias for 'tasks state <id> done')."""
-    ctx.invoke(tasks_state, project_id=project_id, task_id=task_id, new_state="done", note=note)
+    ctx.invoke(tasks_state, project_id=project_id, task_id=task_id, new_state="done", note=note, force=force)
 
 
 @main.command("start")

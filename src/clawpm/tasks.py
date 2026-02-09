@@ -181,8 +181,9 @@ def change_task_state(
     task_id: str,
     new_state: TaskState,
     note: str | None = None,
+    force: bool = False,
 ) -> Task | None:
-    """Change a task's state by moving its file."""
+    """Change a task's state by moving its file (or directory for parent tasks)."""
     tasks_dir = get_tasks_dir(config, project_id)
     if not tasks_dir:
         return None
@@ -193,8 +194,51 @@ def change_task_state(
         return None
 
     current_path = task.file_path
+    is_directory_task = current_path.name == "_task.md"
 
-    # Determine new path based on state
+    # Check for incomplete subtasks when marking parent as done
+    if new_state == TaskState.DONE and task.children and not force:
+        incomplete = []
+        for child_id in task.children:
+            child = get_task(config, project_id, child_id)
+            if child and child.state != TaskState.DONE:
+                incomplete.append(child_id)
+        if incomplete:
+            # Return None to signal failure - caller should check and report
+            return None
+
+    if is_directory_task:
+        # For directory-based tasks, move the entire directory
+        task_dir = current_path.parent
+        
+        if new_state == TaskState.OPEN:
+            new_dir = tasks_dir / task_id
+        elif new_state == TaskState.PROGRESS:
+            # Progress doesn't move directory, just tracks in some other way
+            # For now, keep in same location (progress is tracked differently for dirs)
+            new_dir = task_dir
+        elif new_state == TaskState.DONE:
+            done_dir = tasks_dir / "done"
+            done_dir.mkdir(exist_ok=True)
+            new_dir = done_dir / task_id
+        elif new_state == TaskState.BLOCKED:
+            blocked_dir = tasks_dir / "blocked"
+            blocked_dir.mkdir(exist_ok=True)
+            new_dir = blocked_dir / task_id
+        else:
+            return None
+        
+        # Don't move if already in correct location
+        if task_dir.resolve() == new_dir.resolve():
+            return task
+        
+        # Move the directory
+        shutil.move(str(task_dir), str(new_dir))
+        
+        # Reload and return
+        return Task.from_file(new_dir / "_task.md")
+    
+    # Regular file-based task
     if new_state == TaskState.OPEN:
         new_path = tasks_dir / f"{task_id}.md"
     elif new_state == TaskState.PROGRESS:

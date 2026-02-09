@@ -25,6 +25,7 @@ def add_entry(
     blockers: str | None = None,
     agent: str = "main",
     session_key: str | None = None,
+    auto: bool = False,
 ) -> WorkLogEntry:
     """Add an entry to the work log."""
     entry = WorkLogEntry(
@@ -38,6 +39,7 @@ def add_entry(
         blockers=blockers,
         agent=agent,
         session_key=session_key,
+        auto=auto,
     )
 
     worklog_path = get_worklog_path(config)

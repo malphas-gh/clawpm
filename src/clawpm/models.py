@@ -257,10 +257,11 @@ class WorkLogEntry:
     next: str | None = None
     files_changed: list[str] | None = None
     blockers: str | None = None
+    auto: bool = False  # True for auto-generated entries (state changes)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON output."""
-        return {
+        result = {
             "ts": self.ts.isoformat() + "Z" if self.ts.tzinfo is None else self.ts.isoformat(),
             "project": self.project,
             "task": self.task,
@@ -272,6 +273,9 @@ class WorkLogEntry:
             "files_changed": self.files_changed,
             "blockers": self.blockers,
         }
+        if self.auto:
+            result["auto"] = True
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> WorkLogEntry:
@@ -293,6 +297,7 @@ class WorkLogEntry:
             next=data.get("next"),
             files_changed=data.get("files_changed"),
             blockers=data.get("blockers"),
+            auto=data.get("auto", False),
         )
 
 

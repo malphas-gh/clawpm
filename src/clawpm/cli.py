@@ -562,6 +562,41 @@ def tasks_state(ctx: click.Context, project_id: str | None, task_id: str, new_st
         output_error("task_not_found", f"No task with id '{task_id}' in project '{project_id}'", fmt=fmt)
         sys.exit(1)
 
+    # Auto-log state change
+    action_map = {
+        TaskState.PROGRESS: WorkLogAction.START,
+        TaskState.DONE: WorkLogAction.DONE,
+        TaskState.BLOCKED: WorkLogAction.BLOCKED,
+    }
+    if state in action_map:
+        # Auto-detect git files changed
+        files_changed = None
+        project = get_project(config, project_id)
+        if project and project.repo_path and project.repo_path.exists():
+            try:
+                result = subprocess.run(
+                    ["git", "diff", "--name-only", "HEAD"],
+                    cwd=project.repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    files_changed = [f for f in result.stdout.strip().split('\n') if f]
+            except Exception:
+                pass
+        
+        summary = note if note else f"Task marked {new_state}"
+        add_entry(
+            config,
+            project=project_id,
+            action=action_map[state],
+            task=task_id,
+            summary=summary,
+            files_changed=files_changed,
+            auto=True,
+        )
+
     output_success(f"Task {task_id} moved to {new_state}", data=task.to_dict(), fmt=fmt)
 
 

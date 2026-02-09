@@ -942,14 +942,68 @@ def log_add(
 @log.command("tail")
 @click.option("--project", "-p", "project_id", help="Filter by project")
 @click.option("--limit", "-n", type=int, default=20, help="Number of entries")
+@click.option("--follow", "-f", is_flag=True, help="Follow log output (like tail -f)")
 @click.pass_context
-def log_tail(ctx: click.Context, project_id: str | None, limit: int) -> None:
+def log_tail(ctx: click.Context, project_id: str | None, limit: int, follow: bool) -> None:
     """Show recent work log entries."""
+    import time
+    import json as json_module
+    from .models import WorkLogEntry
+    from .worklog import get_worklog_path
+    
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
 
     entries = tail_entries(config, project=project_id, limit=limit)
     output_worklog_entries(entries, fmt=fmt)
+    
+    if not follow:
+        return
+    
+    # Follow mode - watch for new entries
+    worklog_path = get_worklog_path(config)
+    
+    # Track file position
+    try:
+        pos = worklog_path.stat().st_size if worklog_path.exists() else 0
+    except OSError:
+        pos = 0
+    
+    try:
+        while True:
+            time.sleep(1)  # Poll every second
+            
+            if not worklog_path.exists():
+                continue
+            
+            try:
+                current_size = worklog_path.stat().st_size
+            except OSError:
+                continue
+            
+            if current_size > pos:
+                # New content - read from last position
+                with open(worklog_path) as f:
+                    f.seek(pos)
+                    new_lines = f.read()
+                    pos = f.tell()
+                
+                for line in new_lines.strip().split('\n'):
+                    if not line:
+                        continue
+                    try:
+                        data = json_module.loads(line)
+                        entry = WorkLogEntry.from_dict(data)
+                        
+                        # Apply project filter
+                        if project_id and entry.project != project_id:
+                            continue
+                        
+                        output_worklog_entries([entry], fmt=fmt)
+                    except (json_module.JSONDecodeError, KeyError, ValueError):
+                        continue
+    except KeyboardInterrupt:
+        pass  # Clean exit on Ctrl+C
 
 
 @log.command("last")

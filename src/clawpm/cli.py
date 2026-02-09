@@ -42,6 +42,8 @@ from .tasks import (
     get_next_task,
     change_task_state,
     add_task,
+    split_task,
+    add_subtask,
 )
 from .worklog import (
     add_entry,
@@ -551,6 +553,7 @@ def tasks_state(ctx: click.Context, project_id: str | None, task_id: str, new_st
 @click.option("--priority", type=int, default=5, help="Priority (1-10, lower is higher)")
 @click.option("--complexity", "-c", type=click.Choice(["s", "m", "l", "xl"]), help="Complexity")
 @click.option("--depends", "-d", multiple=True, help="Dependencies (can specify multiple)")
+@click.option("--parent", "parent_id", help="Parent task ID (creates subtask)")
 @click.option("--description", help="Task description (deprecated, use --body)")
 @click.option("--body", "-b", help="Task body content")
 @click.option("--body-file", type=click.Path(exists=True), help="Read body from file")
@@ -564,12 +567,13 @@ def tasks_add(
     priority: int,
     complexity: str | None,
     depends: tuple[str, ...],
+    parent_id: str | None,
     description: str | None,
     body: str | None,
     body_file: str | None,
     read_stdin: bool,
 ) -> None:
-    """Add a new task."""
+    """Add a new task (or subtask with --parent)."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
     
@@ -588,24 +592,58 @@ def tasks_add(
         task_body = description
 
     cmplx = TaskComplexity(complexity) if complexity else None
-    deps = list(depends) if depends else None
 
-    task = add_task(
-        config,
-        project_id,
-        title,
-        task_id=task_id,
-        priority=priority,
-        complexity=cmplx,
-        depends=deps,
-        description=task_body,
-    )
+    # Create subtask if parent specified
+    if parent_id:
+        parent_id = expand_task_id(parent_id, project_id)
+        task = add_subtask(
+            config,
+            project_id,
+            parent_id,
+            title,
+            priority=priority,
+            complexity=cmplx,
+            description=task_body,
+        )
+    else:
+        deps = list(depends) if depends else None
+        task = add_task(
+            config,
+            project_id,
+            title,
+            task_id=task_id,
+            priority=priority,
+            complexity=cmplx,
+            depends=deps,
+            description=task_body,
+        )
 
     if not task:
         output_error("add_failed", f"Failed to add task to project '{project_id}'", fmt=fmt)
         sys.exit(1)
 
     output_success(f"Task {task.id} created", data=task.to_dict(), fmt=fmt)
+
+
+@tasks.command("split")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.argument("task_id")
+@click.pass_context
+def tasks_split(ctx: click.Context, project_id: str | None, task_id: str) -> None:
+    """Convert a task to a parent directory (for adding subtasks)."""
+    fmt = get_format(ctx)
+    config = require_portfolio(ctx)
+    
+    project_id, _ = require_project(ctx, project_id)
+    task_id = expand_task_id(task_id, project_id)
+
+    task = split_task(config, project_id, task_id)
+
+    if not task:
+        output_error("split_failed", f"Failed to split task '{task_id}'", fmt=fmt)
+        sys.exit(1)
+
+    output_success(f"Task {task_id} converted to directory", data=task.to_dict(), fmt=fmt)
 
 
 # ============================================================================
@@ -618,10 +656,11 @@ def tasks_add(
 @click.argument("title")
 @click.option("--priority", type=int, default=5, help="Priority (1-10)")
 @click.option("--complexity", "-c", type=click.Choice(["s", "m", "l", "xl"]), default="m", help="Complexity")
+@click.option("--parent", "parent_id", help="Parent task ID (creates subtask)")
 @click.pass_context
-def quick_add(ctx: click.Context, project_id: str | None, title: str, priority: int, complexity: str) -> None:
+def quick_add(ctx: click.Context, project_id: str | None, title: str, priority: int, complexity: str, parent_id: str | None) -> None:
     """Quick add a task (alias for 'tasks add')."""
-    ctx.invoke(tasks_add, project_id=project_id, title=title, priority=priority, complexity=complexity)
+    ctx.invoke(tasks_add, project_id=project_id, title=title, priority=priority, complexity=complexity, parent_id=parent_id)
 
 
 @main.command("done")

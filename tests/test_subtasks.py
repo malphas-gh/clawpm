@@ -266,15 +266,141 @@ parent: TEST-001
         assert task_map["TEST-002"].parent == "TEST-001"
 
 
-# TODO: Add tests for Phase 2 & 3 features
-# class TestTaskSplit:
-#     """Test tasks split command."""
-#     pass
+class TestTaskSplit:
+    """Test tasks split command."""
+    
+    def test_split_regular_task(self, temp_portfolio):
+        """Test splitting a regular task into directory structure."""
+        config = temp_portfolio["config"]
+        
+        # Create a regular task
+        task = add_task(config, "test", "Task to split", priority=2)
+        assert task.file_path.name == "TEST-000.md"
+        assert not task.is_parent
+        
+        # Import and use split
+        from clawpm.tasks import split_task
+        split = split_task(config, "test", task.id)
+        
+        assert split is not None
+        assert split.file_path.name == "_task.md"
+        assert split.file_path.parent.name == "TEST-000"
+        assert split.is_parent
+        assert split.title == "Task to split"
+    
+    def test_split_already_directory(self, temp_portfolio):
+        """Test that splitting an already-split task is a no-op."""
+        tasks_dir = temp_portfolio["tasks_dir"]
+        config = temp_portfolio["config"]
+        
+        # Create directory-based task
+        parent_dir = tasks_dir / "TEST-001"
+        parent_dir.mkdir()
+        (parent_dir / "_task.md").write_text('''---
+id: TEST-001
+---
+# Already split
+''')
+        
+        from clawpm.tasks import split_task
+        task = split_task(config, "test", "TEST-001")
+        
+        assert task is not None
+        assert task.file_path.name == "_task.md"
+    
+    def test_split_in_done_directory(self, temp_portfolio):
+        """Test splitting a task that's in done/ directory."""
+        tasks_dir = temp_portfolio["tasks_dir"]
+        config = temp_portfolio["config"]
+        
+        # Create done task
+        (tasks_dir / "done" / "TEST-001.md").write_text('''---
+id: TEST-001
+---
+# Completed task
+''')
+        
+        from clawpm.tasks import split_task
+        task = split_task(config, "test", "TEST-001")
+        
+        assert task is not None
+        assert task.file_path.name == "_task.md"
+        assert "done" in task.file_path.parts
+        assert task.state == TaskState.DONE
 
-# class TestAddSubtask:
-#     """Test adding subtasks with --parent."""
-#     pass
 
+class TestAddSubtask:
+    """Test adding subtasks with --parent."""
+    
+    def test_add_subtask_auto_splits_parent(self, temp_portfolio):
+        """Test that adding subtask auto-splits parent if needed."""
+        config = temp_portfolio["config"]
+        
+        # Create regular parent task
+        parent = add_task(config, "test", "Parent task")
+        assert parent.file_path.name == "TEST-000.md"
+        
+        # Add subtask
+        from clawpm.tasks import add_subtask
+        subtask = add_subtask(config, "test", parent.id, "First subtask")
+        
+        assert subtask is not None
+        assert subtask.id == "TEST-000-001"
+        assert subtask.parent == "TEST-000"
+        assert "TEST-000" in subtask.file_path.parts
+        
+        # Verify parent was split
+        parent = get_task(config, "test", "TEST-000")
+        assert parent.file_path.name == "_task.md"
+        assert subtask.id in parent.children
+    
+    def test_add_multiple_subtasks(self, temp_portfolio):
+        """Test adding multiple subtasks gets sequential IDs."""
+        config = temp_portfolio["config"]
+        
+        parent = add_task(config, "test", "Parent task")
+        
+        from clawpm.tasks import add_subtask
+        sub1 = add_subtask(config, "test", parent.id, "Subtask 1")
+        sub2 = add_subtask(config, "test", parent.id, "Subtask 2")
+        sub3 = add_subtask(config, "test", parent.id, "Subtask 3")
+        
+        assert sub1.id == "TEST-000-001"
+        assert sub2.id == "TEST-000-002"
+        assert sub3.id == "TEST-000-003"
+        
+        parent = get_task(config, "test", "TEST-000")
+        assert len(parent.children) == 3
+    
+    def test_add_subtask_to_existing_directory(self, temp_portfolio):
+        """Test adding subtask to already-split parent."""
+        tasks_dir = temp_portfolio["tasks_dir"]
+        config = temp_portfolio["config"]
+        
+        # Create directory-based parent
+        parent_dir = tasks_dir / "TEST-001"
+        parent_dir.mkdir()
+        (parent_dir / "_task.md").write_text('''---
+id: TEST-001
+---
+# Existing parent
+''')
+        (parent_dir / "TEST-001-001.md").write_text('''---
+id: TEST-001-001
+parent: TEST-001
+---
+# Existing subtask
+''')
+        
+        from clawpm.tasks import add_subtask
+        new_sub = add_subtask(config, "test", "TEST-001", "New subtask")
+        
+        # Should get next sequential ID
+        assert new_sub.id == "TEST-001-002"
+        assert new_sub.parent == "TEST-001"
+
+
+# TODO: Add tests for Phase 3 features
 # class TestSubtaskStateMovement:
 #     """Test that subtasks move with parent."""
 #     pass

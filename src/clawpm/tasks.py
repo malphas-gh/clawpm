@@ -304,3 +304,112 @@ def add_task(
     file_path.write_text(content)
 
     return Task.from_file(file_path)
+
+
+def split_task(
+    config: PortfolioConfig,
+    project_id: str,
+    task_id: str,
+) -> Task | None:
+    """Convert a regular task file into a parent directory structure.
+    
+    Converts TASK-ID.md → TASK-ID/_task.md
+    Works from any state directory (tasks/, done/, blocked/).
+    """
+    task = get_task(config, project_id, task_id)
+    if not task or not task.file_path:
+        return None
+    
+    # Already a directory-based task
+    if task.file_path.name == "_task.md":
+        return task
+    
+    current_path = task.file_path
+    parent_dir = current_path.parent
+    
+    # Create task directory in same location as current file
+    task_dir = parent_dir / task_id
+    task_dir.mkdir(exist_ok=True)
+    
+    # Move file to _task.md inside directory
+    new_path = task_dir / "_task.md"
+    shutil.move(str(current_path), str(new_path))
+    
+    return Task.from_file(new_path)
+
+
+def add_subtask(
+    config: PortfolioConfig,
+    project_id: str,
+    parent_id: str,
+    title: str,
+    priority: int = 5,
+    complexity: TaskComplexity | None = None,
+    description: str = "",
+) -> Task | None:
+    """Add a subtask to a parent task.
+    
+    Auto-splits parent if not already a directory.
+    Generates sequential subtask ID (PARENT-001, PARENT-002, etc.).
+    """
+    tasks_dir = get_tasks_dir(config, project_id)
+    if not tasks_dir:
+        return None
+    
+    # Get or create parent as directory
+    parent = get_task(config, project_id, parent_id)
+    if not parent:
+        return None
+    
+    # Split parent if not already a directory
+    if parent.file_path and parent.file_path.name != "_task.md":
+        parent = split_task(config, project_id, parent_id)
+        if not parent:
+            return None
+    
+    # Find parent directory
+    parent_dir = parent.file_path.parent if parent.file_path else None
+    if not parent_dir:
+        return None
+    
+    # Generate subtask ID
+    existing_nums = []
+    for f in parent_dir.glob(f"{parent_id}-*.md"):
+        try:
+            num_str = f.stem.split("-")[-1].replace(".progress", "")
+            num = int(num_str)
+            existing_nums.append(num)
+        except (IndexError, ValueError):
+            pass
+    
+    next_num = max(existing_nums, default=0) + 1
+    subtask_id = f"{parent_id}-{next_num:03d}"
+    
+    # Build frontmatter
+    frontmatter = {
+        "id": subtask_id,
+        "priority": priority,
+        "parent": parent_id,
+        "created": date.today().isoformat(),
+    }
+    
+    if complexity:
+        frontmatter["complexity"] = complexity.value
+    
+    # Build content
+    content = f"""---
+{yaml.dump(frontmatter, default_flow_style=False).strip()}
+---
+# {title}
+
+{description}
+
+## Notes
+
+"""
+    
+    # Write file
+    file_path = parent_dir / f"{subtask_id}.md"
+    file_path.write_text(content)
+    
+    return Task.from_file(file_path)

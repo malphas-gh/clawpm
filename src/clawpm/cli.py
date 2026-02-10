@@ -857,6 +857,148 @@ def quick_status(ctx: click.Context, project_id: str | None) -> None:
                 click.echo(f"\nNext up: {next_task.id}: {next_task.title}")
 
 
+@main.command("context")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.option("--log-limit", "-l", type=int, default=5, help="Number of recent log entries")
+@click.pass_context
+def agent_context(ctx: click.Context, project_id: str | None, log_limit: int) -> None:
+    """Get full agent context (project, tasks, blockers, recent work, git status).
+    
+    Optimized for LLM agent consumption - everything needed to resume work.
+    """
+    fmt = get_format(ctx)
+    config = require_portfolio(ctx)
+    
+    resolved_id, source = require_project(ctx, project_id, required=False)
+    
+    if not resolved_id:
+        output_error("no_project", "No project specified or detected. Use -p or cd into a project.", fmt=fmt)
+        sys.exit(1)
+    
+    proj = get_project(config, resolved_id)
+    if not proj:
+        output_error("project_not_found", f"Project '{resolved_id}' not found", fmt=fmt)
+        sys.exit(1)
+    
+    # Build comprehensive context
+    context: dict = {
+        "project": {
+            "id": proj.id,
+            "name": proj.name,
+            "status": proj.status.value,
+            "priority": proj.priority,
+            "labels": proj.labels,
+            "repo_path": str(proj.repo_path) if proj.repo_path else None,
+        },
+        "source": source,
+    }
+    
+    # Read spec if exists
+    if proj.project_dir:
+        spec_file = proj.project_dir / ".project" / "SPEC.md"
+        if spec_file.exists():
+            spec_content = spec_file.read_text()
+            # Truncate if too long
+            if len(spec_content) > 2000:
+                context["spec"] = spec_content[:2000] + "\n\n[...truncated...]"
+            else:
+                context["spec"] = spec_content
+    
+    # Current task (in progress)
+    in_progress = list_tasks(config, resolved_id, state_filter=TaskState.PROGRESS)
+    context["in_progress"] = [t.to_dict() for t in in_progress]
+    
+    # Next task if nothing in progress
+    if not in_progress:
+        next_task = get_next_task(config, resolved_id)
+        if next_task:
+            context["next_task"] = next_task.to_dict()
+    
+    # Blocked tasks
+    blocked = list_tasks(config, resolved_id, state_filter=TaskState.BLOCKED)
+    context["blockers"] = [t.to_dict() for t in blocked]
+    
+    # Open task count
+    open_tasks = list_tasks(config, resolved_id, state_filter=TaskState.OPEN)
+    context["open_count"] = len(open_tasks)
+    
+    # Recent work log
+    recent_entries = tail_entries(config, project=resolved_id, limit=log_limit)
+    context["recent_work"] = [e.to_dict() for e in recent_entries]
+    
+    # Git status if repo_path exists
+    if proj.repo_path and proj.repo_path.exists():
+        git_status = {}
+        try:
+            # Current branch
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=proj.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                git_status["branch"] = result.stdout.strip()
+            
+            # Uncommitted changes
+            result = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=proj.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                changes = [line for line in result.stdout.strip().split('\n') if line]
+                git_status["uncommitted_count"] = len(changes)
+                if changes:
+                    git_status["uncommitted"] = changes[:10]  # Limit to 10
+                    if len(changes) > 10:
+                        git_status["uncommitted"].append(f"... and {len(changes) - 10} more")
+            
+            # Recent commits
+            result = subprocess.run(
+                ["git", "log", "--oneline", "-3"],
+                cwd=proj.repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                git_status["recent_commits"] = [line for line in result.stdout.strip().split('\n') if line]
+        except Exception:
+            pass
+        
+        if git_status:
+            context["git"] = git_status
+    
+    # Open issues
+    if proj.project_dir:
+        import json as json_mod
+        issues_file = proj.project_dir / ".agent" / "issues.jsonl"
+        if issues_file.exists():
+            try:
+                open_issues = []
+                with open(issues_file) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            issue = json_mod.loads(line)
+                            if not issue.get("fixed"):
+                                open_issues.append({
+                                    "type": issue.get("type"),
+                                    "severity": issue.get("severity"),
+                                    "summary": (issue.get("actual") or issue.get("context", ""))[:100],
+                                })
+                if open_issues:
+                    context["open_issues"] = open_issues[:5]
+            except Exception:
+                pass
+    
+    output_json(context)
+
+
 # ============================================================================
 # Log commands
 # ============================================================================

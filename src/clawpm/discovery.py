@@ -3,9 +3,28 @@
 from __future__ import annotations
 
 import os
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 from .models import PortfolioConfig, ProjectSettings, ProjectStatus
+
+
+@dataclass
+class UntrackedRepo:
+    """A git repo without .project/ tracking."""
+    
+    path: Path
+    name: str
+    remote: str | None = None
+    
+    def to_dict(self) -> dict:
+        return {
+            "path": str(self.path),
+            "name": self.name,
+            "remote": self.remote,
+            "tracked": False,
+        }
 
 
 def get_portfolio_path() -> Path | None:
@@ -116,6 +135,157 @@ def get_project_dir(config: PortfolioConfig, project_id: str) -> Path | None:
     if project and project.project_dir:
         return project.project_dir / ".project"
     return None
+
+
+def discover_untracked_repos(config: PortfolioConfig) -> list[UntrackedRepo]:
+    """Discover git repos in project_roots that don't have .project/ tracking."""
+    untracked: list[UntrackedRepo] = []
+    
+    # Get IDs of tracked projects to exclude
+    tracked_paths = set()
+    for root in config.project_roots:
+        if not root.exists():
+            continue
+        for item in root.iterdir():
+            if not item.is_dir():
+                continue
+            if (item / ".project" / "settings.toml").exists():
+                tracked_paths.add(item.resolve())
+    
+    # Find git repos without .project/
+    for root in config.project_roots:
+        if not root.exists():
+            continue
+        
+        # Skip OpenClaw workspace
+        if config.openclaw_workspace and root == config.openclaw_workspace:
+            continue
+        
+        for item in root.iterdir():
+            if not item.is_dir():
+                continue
+            
+            # Skip if already tracked
+            if item.resolve() in tracked_paths:
+                continue
+            
+            # Check if it's a git repo
+            if not (item / ".git").exists():
+                continue
+            
+            # Get remote URL if available
+            remote = None
+            try:
+                result = subprocess.run(
+                    ["git", "remote", "get-url", "origin"],
+                    cwd=item,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    remote = result.stdout.strip()
+            except Exception:
+                pass
+            
+            untracked.append(UntrackedRepo(
+                path=item,
+                name=item.name,
+                remote=remote,
+            ))
+    
+    # Sort by name
+    untracked.sort(key=lambda r: r.name)
+    
+    return untracked
+
+
+def is_git_repo(path: Path) -> bool:
+    """Check if a path is a git repository."""
+    return (path / ".git").exists()
+
+
+def init_project_from_repo(repo_path: Path, project_id: str | None = None) -> ProjectSettings | None:
+    """Initialize a .project/ structure in a git repo.
+    
+    Auto-detects project name from directory and remote.
+    Returns the created ProjectSettings.
+    """
+    if not repo_path.is_dir():
+        return None
+    
+    # Generate project ID from directory name if not provided
+    if not project_id:
+        project_id = repo_path.name.lower().replace(" ", "-").replace("_", "-")
+    
+    # Generate project name from directory or remote
+    project_name = repo_path.name
+    
+    # Try to get a better name from git remote
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            remote = result.stdout.strip()
+            # Extract repo name from remote URL
+            # e.g., git@github.com:user/repo.git -> repo
+            # or https://github.com/user/repo.git -> repo
+            if "/" in remote:
+                name = remote.split("/")[-1]
+                if name.endswith(".git"):
+                    name = name[:-4]
+                project_name = name
+    except Exception:
+        pass
+    
+    # Create .project directory structure
+    project_dir = repo_path / ".project"
+    project_dir.mkdir(exist_ok=True)
+    
+    tasks_dir = project_dir / "tasks"
+    tasks_dir.mkdir(exist_ok=True)
+    (tasks_dir / "done").mkdir(exist_ok=True)
+    (tasks_dir / "blocked").mkdir(exist_ok=True)
+    
+    (project_dir / "research").mkdir(exist_ok=True)
+    (project_dir / "notes").mkdir(exist_ok=True)
+    
+    # Write settings.toml
+    settings_content = f'''id = "{project_id}"
+name = "{project_name}"
+status = "active"
+priority = 5
+repo_path = "{repo_path}"
+'''
+    (project_dir / "settings.toml").write_text(settings_content)
+    
+    # Create minimal SPEC.md
+    spec_content = f'''# {project_name}
+
+## Purpose
+
+(Describe the purpose of this project)
+
+## Goals
+
+- (Add goals)
+
+## Notes
+
+Auto-initialized by clawpm from git repo.
+'''
+    (project_dir / "SPEC.md").write_text(spec_content)
+    
+    # Create learnings.md
+    (project_dir / "learnings.md").write_text(f"# Learnings - {project_name}\n\n")
+    
+    # Load and return the project
+    return ProjectSettings.load(project_dir / "settings.toml")
 
 
 def validate_portfolio(config: PortfolioConfig) -> list[str]:

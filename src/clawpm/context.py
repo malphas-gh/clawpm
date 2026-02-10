@@ -6,7 +6,7 @@ import os
 import re
 from pathlib import Path
 
-from .discovery import load_portfolio_config, get_project
+from .discovery import load_portfolio_config, get_project, is_git_repo, init_project_from_repo
 from .models import ProjectSettings
 
 
@@ -36,6 +36,44 @@ def detect_project_from_cwd() -> ProjectSettings | None:
                 pass
         current = current.parent
     
+    return None
+
+
+def detect_untracked_repo_from_cwd() -> Path | None:
+    """Detect if cwd is inside an untracked git repo.
+    
+    Returns the repo root path if found, None otherwise.
+    """
+    config = load_portfolio_config()
+    if not config:
+        return None
+    
+    cwd = Path.cwd().resolve()
+    
+    # Walk up looking for .git (but not .project)
+    current = cwd
+    while current != current.parent:
+        if (current / ".git").exists() and not (current / ".project" / "settings.toml").exists():
+            # Check if this is under a project_root
+            for root in config.project_roots:
+                try:
+                    if root.resolve() in current.parents or root.resolve() == current.parent:
+                        return current
+                except Exception:
+                    pass
+        current = current.parent
+    
+    return None
+
+
+def auto_init_if_untracked() -> ProjectSettings | None:
+    """Auto-initialize a project if cwd is in an untracked git repo.
+    
+    Returns the newly created ProjectSettings, or None if not applicable.
+    """
+    repo_path = detect_untracked_repo_from_cwd()
+    if repo_path:
+        return init_project_from_repo(repo_path)
     return None
 
 

@@ -33,8 +33,11 @@ from .discovery import (
     get_portfolio_path,
     load_portfolio_config,
     discover_projects,
+    discover_untracked_repos,
     get_project,
     validate_portfolio,
+    init_project_from_repo,
+    is_git_repo,
 )
 from .tasks import (
     list_tasks,
@@ -62,6 +65,8 @@ from .context import (
     get_context_project,
     set_context_project,
     detect_project_from_cwd,
+    detect_untracked_repo_from_cwd,
+    auto_init_if_untracked,
 )
 
 
@@ -109,11 +114,14 @@ def require_portfolio(ctx: click.Context):
     return config
 
 
-def require_project(ctx: click.Context, project_id: str | None, required: bool = True) -> tuple[str | None, str]:
+def require_project(ctx: click.Context, project_id: str | None, required: bool = True, auto_init: bool = True) -> tuple[str | None, str]:
     """Resolve project from explicit arg, global flag, cwd, or context.
     
     Returns (project_id, source). Exits with error if required and not found.
-    Priority: explicit arg > global --project flag > cwd > context
+    Priority: explicit arg > global --project flag > cwd > auto-init > context
+    
+    If auto_init=True and cwd is in an untracked git repo under project_roots,
+    automatically initializes a .project/ structure.
     """
     # Check for global --project flag if no explicit arg
     if not project_id:
@@ -122,6 +130,17 @@ def require_project(ctx: click.Context, project_id: str | None, required: bool =
             return (project_id, "global")
     
     resolved_id, source = resolve_project(project_id)
+    
+    # If no project found and auto_init enabled, check for untracked git repo
+    if not resolved_id and auto_init:
+        untracked_repo = detect_untracked_repo_from_cwd()
+        if untracked_repo:
+            fmt = get_format(ctx)
+            # Auto-initialize the project
+            project = auto_init_if_untracked()
+            if project:
+                click.echo(f"Auto-initialized project '{project.id}' from git repo", err=True)
+                return (project.id, "auto-init")
     
     if required and not resolved_id:
         fmt = get_format(ctx)
@@ -207,16 +226,35 @@ def projects() -> None:
     default=None,
     help="Filter by status",
 )
+@click.option("--all", "-a", "show_all", is_flag=True, help="Include untracked git repos")
 @click.pass_context
-def projects_list(ctx: click.Context, status_filter: str | None) -> None:
-    """List all projects."""
+def projects_list(ctx: click.Context, status_filter: str | None, show_all: bool) -> None:
+    """List all projects (use --all to include untracked git repos)."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
 
     status = ProjectStatus(status_filter) if status_filter else None
     projects_found = discover_projects(config, status_filter=status)
 
-    output_projects_list(projects_found, fmt=fmt)
+    if show_all or fmt == OutputFormat.JSON:
+        untracked = discover_untracked_repos(config)
+    else:
+        untracked = []
+    
+    if fmt == OutputFormat.JSON:
+        result = {
+            "projects": [p.to_dict() for p in projects_found],
+            "untracked": [r.to_dict() for r in untracked],
+        }
+        output_json(result)
+    else:
+        output_projects_list(projects_found, fmt=fmt)
+        
+        if untracked:
+            click.echo("\nUntracked git repos (use 'clawpm project init' to add):")
+            for repo in untracked:
+                remote_hint = f" ({repo.remote.split('/')[-1].replace('.git', '')})" if repo.remote else ""
+                click.echo(f"  ○ {repo.name}{remote_hint}")
 
 
 @projects.command("next")

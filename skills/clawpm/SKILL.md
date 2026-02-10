@@ -24,35 +24,54 @@ clawpm use my-project
 clawpm status              # Now uses my-project
 ```
 
+## Agent Context (Full Onboarding)
+
+Get everything needed to resume work in one command:
+
+```bash
+clawpm context             # Full context for current project
+clawpm context -p myproj   # Specific project
+```
+
+Returns JSON with:
+- Project info + spec (truncated)
+- In-progress tasks or next task
+- Blockers needing attention
+- Recent work log (last 5 entries)
+- Git status (branch, uncommitted, recent commits)
+- Open issues
+
 ## Top-Level Commands (Shortcuts)
 
 | Command | Equivalent | Description |
 |---------|------------|-------------|
 | `clawpm add "Title"` | `clawpm tasks add -t "Title"` | Quick add a task |
+| `clawpm add "Title" --parent 25` | - | Add subtask |
 | `clawpm done 42` | `clawpm tasks state 42 done` | Mark task done |
 | `clawpm start 42` | `clawpm tasks state 42 progress` | Start working |
 | `clawpm block 42` | `clawpm tasks state 42 blocked` | Mark blocked |
 | `clawpm next` | `clawpm projects next` | Get next task |
 | `clawpm status` | - | Project overview |
+| `clawpm context` | - | Full agent context |
 | `clawpm use <id>` | - | Set project context |
 
 ## Project Auto-Detection
 
 ClawPM automatically detects your project from (in priority order):
 1. **Subcommand flag**: `clawpm tasks list --project clawpm`
-2. **Global flag**: `clawpm --project clawpm status` (works from anywhere)
+2. **Global flag**: `clawpm --project clawpm status`
 3. **Current directory**: Walks up looking for `.project/settings.toml`
-4. **Context**: Previously set with `clawpm use <project>`
+4. **Auto-init**: If in untracked git repo under project_roots, auto-initializes
+5. **Context**: Previously set with `clawpm use <project>`
 
 ```bash
 # From project directory - auto-detects:
 cd ~/Development/clawpm
 clawpm status              # Uses clawpm automatically
-clawpm done 30             # Marks CLAWP-030 done
 
-# From anywhere - use global flag:
-clawpm -p clawpm status
-clawpm --project clawpm done 30
+# Auto-init from new git clone:
+cd ~/Development/new-repo  # Untracked git repo
+clawpm add "First task"    # Auto-initializes .project/, then adds task
 ```
 
 ## Short Task IDs
@@ -61,32 +80,52 @@ You can use just the numeric part of a task ID:
 - `42` → `CLAWP-042` (prefix derived from project ID)
 - `CLAWP-042` → `CLAWP-042` (full ID works too)
 
+## Subtasks
+
+Tasks can have subtasks via directory structure:
+
+```bash
+# Convert task to parent (for adding subtasks)
+clawpm tasks split 25      # CLAWP-025.md → CLAWP-025/_task.md
+
+# Add subtask directly (auto-splits parent if needed)
+clawpm add "Subtask" --parent 25   # Creates CLAWP-025/CLAWP-025-001.md
+
+# List shows hierarchy
+clawpm -f text tasks list
+# CLAWP-025 [open] P2 Parent task
+#   └─ CLAWP-025-001 ↳ [done] P3 Subtask
+#   └─ CLAWP-025-002 ↳ [progress] P3 Another subtask
+
+# Parent completion blocked if subtasks incomplete
+clawpm done 25             # Fails if subtasks not done
+clawpm done 25 --force     # Override and complete anyway
+```
+
+Subtasks move with parent on state change (done/blocked moves entire directory).
+
 ## Setting Up a New Project
 
-### From an Existing Git Repo
+### Auto-Init from Git Repo
+
+```bash
+git clone git@github.com:user/repo.git ~/Development/repo
+cd ~/Development/repo
+clawpm add "First task"    # Auto-initializes project
+```
+
+### Manual Init
 
 ```bash
 cd /path/to/my-repo
 clawpm project init                    # Auto-detects ID/name from directory
 clawpm project init --id myproj        # Custom ID
-clawpm project init --name "My Project" # Custom name
 ```
 
-This creates `.project/` inside the repo with:
-- `settings.toml` - Project config
-- `SPEC.md` - Project specification template
-- `tasks/` - Task storage
-- `learnings.md` - Running notes
-- `research/`, `notes/` - Research storage
-
-The repo is immediately tracked by ClawPM - `clawpm status` works from that directory.
-
-### From Outside the Repo
+### Discover Untracked Repos
 
 ```bash
-clawpm project init --in-repo /path/to/repo
-# or
-clawpm project init -r /path/to/repo
+clawpm projects list --all   # Shows tracked + untracked git repos
 ```
 
 ## Web Dashboard
@@ -106,26 +145,30 @@ Features:
 
 ### Projects
 ```bash
-clawpm projects list                    # List all projects
+clawpm projects list [--all]            # List projects (--all includes untracked repos)
 clawpm projects next                    # Next task across all projects
-clawpm project context [project]        # Full project context (spec, last work, blockers)
+clawpm project context [project]        # Full project context
 clawpm project init                     # Initialize project in current dir
 ```
 
 ### Tasks
 ```bash
-clawpm tasks list [--state open|done|blocked|progress|all]
+clawpm tasks list [-s open|done|blocked|progress|all] [--flat]
 clawpm tasks show <id>                  # Task details
-clawpm tasks add -t "Title" [--priority 3] [--complexity m]
-clawpm tasks state <id> open|progress|done|blocked [--note "..."]
+clawpm tasks add -t "Title" [--priority 3] [--complexity m] [--parent <id>]
+clawpm tasks state <id> open|progress|done|blocked [--note "..."] [--force]
+clawpm tasks split <id>                 # Convert to parent directory for subtasks
 ```
 
 ### Work Log
 ```bash
 clawpm log add --task <id> --action progress --summary "What I did"
 clawpm log tail [--limit 10]            # Recent entries
+clawpm log tail --follow                # Live tail (like tail -f)
 clawpm log last                         # Most recent entry
 ```
+
+Note: State changes (start/done/block) auto-log to work_log with git files_changed.
 
 ### Research
 ```bash
@@ -142,7 +185,8 @@ clawpm issues list [--open]             # Open issues only
 
 ### Admin
 ```bash
-clawpm status              # Project overview (or all projects if none selected)
+clawpm status              # Project overview
+clawpm context             # Full agent context (project, tasks, git, issues)
 clawpm doctor              # Health check
 clawpm setup --check       # Verify installation
 clawpm use [project]       # Set/show project context
@@ -153,21 +197,20 @@ clawpm use --clear         # Clear context
 
 ### Starting a Session
 ```bash
-clawpm next                              # Find next task
-clawpm start 42                          # Mark in progress
-# Read the task file for full details
+clawpm context             # Get full context
+clawpm start 42            # Mark in progress (auto-logs)
 ```
 
 ### During Work
 ```bash
-clawpm log add --task 42 --action progress --summary "Implemented X"
+# Work on the task...
+# State changes auto-log with git files_changed
 ```
 
 ### Completing Work
 ```bash
-git add . && git commit -m "feat: ..."   # Commit changes
-clawpm done 42 --note "Completed"        # Mark done
-clawpm log add --task 42 --action done --summary "..."
+git add . && git commit -m "feat: ..."
+clawpm done 42 --note "Completed"       # Auto-logs with files_changed
 ```
 
 ### Hit a Blocker
@@ -175,15 +218,6 @@ clawpm log add --task 42 --action done --summary "..."
 clawpm block 42 --note "Need API credentials"
 # Dashboard shows this; human can respond via web UI
 ```
-
-## Research with Subagents
-
-For background research:
-
-1. Create research: `clawpm research add --type investigation --title "Question"`
-2. Spawn subagent: Use `sessions_spawn` with the research task
-3. Link session: `clawpm research link --id <id> --session-key <key>`
-4. Check results: `sessions_history` or read the research file
 
 ## Task States & File Locations
 
@@ -194,21 +228,36 @@ For background research:
 | done | `tasks/done/CLAWP-042.md` | Completed |
 | blocked | `tasks/blocked/CLAWP-042.md` | Waiting |
 
+### Subtask Directory Structure
+```
+tasks/
+  CLAWP-024.md              # Regular task
+  CLAWP-025/                # Parent task directory
+    _task.md                # Parent task content
+    CLAWP-025-001.md        # Subtask 1
+    CLAWP-025-002.md        # Subtask 2
+  done/
+    CLAWP-023/              # Completed parent + subtasks
+```
+
 ## Work Log Actions
 
-- `start` - Started working
+- `start` - Started working (auto-logged on `clawpm start`)
 - `progress` - Made progress
-- `done` - Completed
-- `blocked` - Hit a blocker
+- `done` - Completed (auto-logged on `clawpm done`)
+- `blocked` - Hit a blocker (auto-logged on `clawpm block`)
 - `pause` - Switching tasks
 - `research` - Research note
 - `note` - General observation
+
+Auto-logged entries include `"auto": true` and `files_changed` from git.
 
 ## Tips
 
 - **JSON output**: All commands emit JSON by default; use `-f text` for human-readable
 - **Portfolio root**: Must be OUTSIDE OpenClaw workspace
 - **Work log**: Append-only at `~/clawpm/work_log.jsonl`
+- **Live monitoring**: `clawpm log tail -f` for real-time log watching
 - **Test changes**: When editing clawpm itself, test with `uv run clawpm ...` from the repo
 
 ## Troubleshooting
@@ -217,4 +266,5 @@ For background research:
 clawpm doctor              # Check for issues
 clawpm setup --check       # Verify installation
 clawpm log tail            # See recent activity
+clawpm context             # Full project state
 ```

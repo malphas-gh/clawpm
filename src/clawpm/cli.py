@@ -781,10 +781,11 @@ def tasks_split(ctx: click.Context, project_id: str | None, task_id: str) -> Non
 @click.option("--priority", type=int, default=5, help="Priority (1-10)")
 @click.option("--complexity", "-c", type=click.Choice(["s", "m", "l", "xl"]), default="m", help="Complexity")
 @click.option("--parent", "parent_id", help="Parent task ID (creates subtask)")
+@click.option("--body", "-b", help="Task description/body")
 @click.pass_context
-def quick_add(ctx: click.Context, project_id: str | None, title: str, priority: int, complexity: str, parent_id: str | None) -> None:
+def quick_add(ctx: click.Context, project_id: str | None, title: str, priority: int, complexity: str, parent_id: str | None, body: str | None) -> None:
     """Quick add a task (alias for 'tasks add')."""
-    ctx.invoke(tasks_add, project_id=project_id, title=title, priority=priority, complexity=complexity, parent_id=parent_id)
+    ctx.invoke(tasks_add, project_id=project_id, title=title, priority=priority, complexity=complexity, parent_id=parent_id, body=body)
 
 
 @main.command("done")

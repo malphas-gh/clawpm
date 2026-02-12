@@ -46,6 +46,7 @@ Returns JSON with:
 | Command | Equivalent | Description |
 |---------|------------|-------------|
 | `clawpm add "Title"` | `clawpm tasks add -t "Title"` | Quick add a task |
+| `clawpm add "Title" -b "desc"` | `clawpm tasks add -t "Title" -b "desc"` | Add with body |
 | `clawpm add "Title" --parent 25` | - | Add subtask |
 | `clawpm done 42` | `clawpm tasks state 42 done` | Mark task done |
 | `clawpm start 42` | `clawpm tasks state 42 progress` | Start working |
@@ -155,9 +156,11 @@ clawpm project init                     # Initialize project in current dir
 
 ### Tasks
 ```bash
+clawpm tasks                            # List tasks (default: open+progress+blocked)
 clawpm tasks list [-s open|done|blocked|progress|all] [--flat]
 clawpm tasks show <id>                  # Task details
-clawpm tasks add -t "Title" [--priority 3] [--complexity m] [--parent <id>]
+clawpm tasks add -t "Title" [--priority 3] [--complexity m] [--parent <id>] [-b "body"]
+clawpm tasks edit <id> [--title "..."] [--priority N] [--complexity s|m|l|xl] [--body "..."]
 clawpm tasks state <id> open|progress|done|blocked [--note "..."] [--force]
 clawpm tasks split <id>                 # Convert to parent directory for subtasks
 ```

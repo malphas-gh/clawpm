@@ -268,6 +268,7 @@ Commit entries also include `"commit_hash"` and auto-extract task IDs from commi
 
 ## Tips
 
+- **Flag order**: `clawpm [global flags] <command> [command flags]` — e.g. `clawpm -f text tasks list -s open`
 - **JSON output**: All commands emit JSON by default; use `-f text` for human-readable
 - **One command per call**: Don't chain clawpm commands with `&&` and pipe the last one — the pipe may receive empty input in sandboxed environments. Run each command separately instead
 - **Portfolio root**: Must be OUTSIDE OpenClaw workspace

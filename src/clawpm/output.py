@@ -76,8 +76,15 @@ def output_success(message: str, data: Any = None, fmt: OutputFormat = OutputFor
             console.print(data)
 
 
-def output_projects_list(projects: list[Any], fmt: OutputFormat = OutputFormat.JSON) -> None:
-    """Output a list of projects."""
+def output_projects_list(
+    projects: list[Any],
+    fmt: OutputFormat = OutputFormat.JSON,
+    task_counts: dict[str, dict[str, int]] | None = None,
+) -> None:
+    """Output a list of projects.
+
+    task_counts: optional dict of {project_id: {"open": N, "progress": N, "blocked": N}}
+    """
     if fmt == OutputFormat.JSON:
         output_json([_serialize(p) for p in projects])
     else:
@@ -89,8 +96,8 @@ def output_projects_list(projects: list[Any], fmt: OutputFormat = OutputFormat.J
         table.add_column("ID", style="cyan")
         table.add_column("Name")
         table.add_column("Status")
-        table.add_column("Priority", justify="right")
-        table.add_column("Labels")
+        table.add_column("P", justify="right")
+        table.add_column("Tasks", justify="right")
 
         for p in projects:
             status_color = {
@@ -99,12 +106,25 @@ def output_projects_list(projects: list[Any], fmt: OutputFormat = OutputFormat.J
                 "archived": "dim",
             }.get(p.status.value, "white")
 
+            # Build task summary
+            tasks_str = "-"
+            if task_counts and p.id in task_counts:
+                counts = task_counts[p.id]
+                parts = []
+                if counts.get("progress"):
+                    parts.append(f"[yellow]{counts['progress']} active[/yellow]")
+                if counts.get("blocked"):
+                    parts.append(f"[red]{counts['blocked']} blocked[/red]")
+                if counts.get("open"):
+                    parts.append(f"{counts['open']} open")
+                tasks_str = ", ".join(parts) if parts else "[dim]idle[/dim]"
+
             table.add_row(
                 p.id,
                 p.name,
                 f"[{status_color}]{p.status.value}[/{status_color}]",
                 str(p.priority),
-                ", ".join(p.labels) if p.labels else "-",
+                tasks_str,
             )
 
         console.print(table)
@@ -208,6 +228,7 @@ def output_worklog_entries(entries: list[Any], fmt: OutputFormat = OutputFormat.
                 "pause": "dim",
                 "research": "blue",
                 "note": "white",
+                "commit": "magenta",
             }.get(entry.action.value, "white")
 
             ts = entry.ts.strftime("%Y-%m-%d %H:%M") if hasattr(entry.ts, "strftime") else str(entry.ts)
@@ -267,30 +288,73 @@ def output_context(context: dict[str, Any], fmt: OutputFormat = OutputFormat.JSO
     if fmt == OutputFormat.JSON:
         output_json(context)
     else:
-        console.print(Panel(f"[cyan bold]{context['project']['name']}[/cyan bold]", title="Project Context"))
+        proj = context["project"]
+        source = context.get("source", "")
+        source_hint = f" [dim]({source})[/dim]" if source else ""
+        console.print(Panel(
+            f"[cyan bold]{proj['name']}[/cyan bold]{source_hint}",
+            title="Project Context",
+        ))
 
-        console.print("\n[bold]Project Info[/bold]")
-        console.print(f"  ID: {context['project']['id']}")
-        console.print(f"  Status: {context['project']['status']}")
-        console.print(f"  Priority: {context['project']['priority']}")
+        console.print(f"  ID: {proj['id']} | Status: {proj['status']} | Priority: {proj['priority']}")
+        if proj.get("labels"):
+            console.print(f"  Labels: {', '.join(proj['labels'])}")
 
         if context.get("spec"):
             console.print("\n[bold]Spec[/bold]")
-            console.print(f"  {context['spec'][:200]}..." if len(context.get("spec", "")) > 200 else f"  {context.get('spec', 'N/A')}")
+            spec = context["spec"]
+            console.print(f"  {spec[:200]}..." if len(spec) > 200 else f"  {spec}")
 
-        if context.get("last_work"):
-            console.print("\n[bold]Last Work[/bold]")
+        # In-progress tasks
+        if context.get("in_progress"):
+            console.print("\n[bold yellow]In Progress[/bold yellow]")
+            for t in context["in_progress"]:
+                console.print(f"  → [{t['id']}] {t['title']}")
+
+        if context.get("next_task"):
+            nt = context["next_task"]
+            console.print(f"\n[bold]Next Task[/bold]")
+            console.print(f"  [{nt['id']}] {nt['title']}")
+
+        if context.get("open_count") is not None:
+            console.print(f"  [dim]{context['open_count']} open task(s)[/dim]")
+
+        if context.get("blockers"):
+            console.print(f"\n[bold red]Blockers[/bold red]")
+            for b in context["blockers"]:
+                console.print(f"  ✗ [{b['id']}] {b['title']}")
+
+        # Recent work (from agent_context)
+        if context.get("recent_work"):
+            console.print(f"\n[bold]Recent Work[/bold]")
+            for entry in context["recent_work"][-3:]:
+                ts = entry.get("ts", "")[:16]
+                task = f" {entry['task']}" if entry.get("task") else ""
+                console.print(f"  [dim]{ts}[/dim]{task} {entry.get('action', '')} - {entry.get('summary', '')}")
+
+        # Last work (from project context)
+        elif context.get("last_work"):
+            console.print(f"\n[bold]Last Work[/bold]")
             lw = context["last_work"]
             console.print(f"  {lw.get('ts', 'N/A')} - {lw.get('action', 'N/A')}")
             if lw.get("summary"):
                 console.print(f"  {lw['summary']}")
 
-        if context.get("next_task"):
-            nt = context["next_task"]
-            console.print("\n[bold]Next Task[/bold]")
-            console.print(f"  [{nt['id']}] {nt['title']}")
+        # Git status
+        if context.get("git"):
+            git = context["git"]
+            console.print(f"\n[bold]Git[/bold]")
+            parts = [f"branch: {git.get('branch', '?')}"]
+            if git.get("uncommitted_count"):
+                parts.append(f"{git['uncommitted_count']} uncommitted")
+            console.print(f"  {' | '.join(parts)}")
+            if git.get("recent_commits"):
+                for c in git["recent_commits"][:3]:
+                    console.print(f"  [dim]{c}[/dim]")
 
-        if context.get("blockers"):
-            console.print("\n[bold red]Blockers[/bold red]")
-            for b in context["blockers"]:
-                console.print(f"  - [{b['id']}] {b['title']}")
+        # Open issues
+        if context.get("open_issues"):
+            console.print(f"\n[bold]Open Issues[/bold]")
+            for issue in context["open_issues"]:
+                sev = issue.get("severity", "?")[0].upper()
+                console.print(f"  [{sev}] {issue.get('type', '?')}: {issue.get('summary', '')}")

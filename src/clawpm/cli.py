@@ -45,6 +45,7 @@ from .tasks import (
     get_next_task,
     change_task_state,
     add_task,
+    edit_task,
     split_task,
     add_subtask,
 )
@@ -52,6 +53,7 @@ from .worklog import (
     add_entry,
     tail_entries,
     get_last_entry,
+    get_logged_commit_hashes,
 )
 from .research import (
     list_research,
@@ -116,10 +118,10 @@ def require_portfolio(ctx: click.Context):
 
 def require_project(ctx: click.Context, project_id: str | None, required: bool = True, auto_init: bool = True) -> tuple[str | None, str]:
     """Resolve project from explicit arg, global flag, cwd, or context.
-    
+
     Returns (project_id, source). Exits with error if required and not found.
     Priority: explicit arg > global --project flag > cwd > auto-init > context
-    
+
     If auto_init=True and cwd is in an untracked git repo under project_roots,
     automatically initializes a .project/ structure.
     """
@@ -128,20 +130,25 @@ def require_project(ctx: click.Context, project_id: str | None, required: bool =
         project_id = ctx.obj.get("global_project")
         if project_id:
             return (project_id, "global")
-    
+
     resolved_id, source = resolve_project(project_id)
-    
+
     # If no project found and auto_init enabled, check for untracked git repo
     if not resolved_id and auto_init:
         untracked_repo = detect_untracked_repo_from_cwd()
         if untracked_repo:
-            fmt = get_format(ctx)
             # Auto-initialize the project
             project = auto_init_if_untracked()
             if project:
                 click.echo(f"Auto-initialized project '{project.id}' from git repo", err=True)
                 return (project.id, "auto-init")
-    
+
+    # Show which project was auto-detected (text mode only, to stderr)
+    if resolved_id and source in ("cwd", "context"):
+        fmt = get_format(ctx)
+        if fmt == OutputFormat.TEXT:
+            click.echo(f"Using project: {resolved_id} (from {source})", err=True)
+
     if required and not resolved_id:
         fmt = get_format(ctx)
         output_error(
@@ -150,7 +157,7 @@ def require_project(ctx: click.Context, project_id: str | None, required: bool =
             fmt=fmt,
         )
         sys.exit(1)
-    
+
     return resolved_id, source
 
 
@@ -248,8 +255,18 @@ def projects_list(ctx: click.Context, status_filter: str | None, show_all: bool)
         }
         output_json(result)
     else:
-        output_projects_list(projects_found, fmt=fmt)
-        
+        # Collect task counts for text output
+        task_counts = {}
+        for proj in projects_found:
+            counts = {}
+            for state_name, state_val in [("open", TaskState.OPEN), ("progress", TaskState.PROGRESS), ("blocked", TaskState.BLOCKED)]:
+                count = len(list_tasks(config, proj.id, state_filter=state_val))
+                if count:
+                    counts[state_name] = count
+            task_counts[proj.id] = counts
+
+        output_projects_list(projects_found, fmt=fmt, task_counts=task_counts)
+
         if untracked:
             click.echo("\nUntracked git repos (use 'clawpm project init' to add):")
             for repo in untracked:
@@ -314,50 +331,8 @@ def project() -> None:
 @click.argument("project_id", required=False)
 @click.pass_context
 def project_context(ctx: click.Context, project_id: str | None) -> None:
-    """Get full context for a project (spec, last work, next task, blockers)."""
-    fmt = get_format(ctx)
-    config = require_portfolio(ctx)
-    
-    project_id, _ = require_project(ctx, project_id)
-
-    proj = get_project(config, project_id)
-    if not proj:
-        output_error("project_not_found", f"No project with id '{project_id}'", fmt=fmt)
-        sys.exit(1)
-
-    # Build context
-    context: dict = {
-        "project": {
-            "id": proj.id,
-            "name": proj.name,
-            "status": proj.status.value,
-            "priority": proj.priority,
-            "labels": proj.labels,
-        }
-    }
-
-    # Read spec if exists
-    if proj.project_dir:
-        spec_file = proj.project_dir / ".project" / "SPEC.md"
-        if spec_file.exists():
-            context["spec"] = spec_file.read_text()
-
-    # Get last work log entry
-    last_work = get_last_entry(config, project=project_id)
-    if last_work:
-        context["last_work"] = last_work.to_dict()
-
-    # Get next task
-    next_task = get_next_task(config, project_id)
-    if next_task:
-        context["next_task"] = next_task.to_dict()
-
-    # Get blocked tasks
-    blocked = list_tasks(config, project_id, state_filter=TaskState.BLOCKED)
-    if blocked:
-        context["blockers"] = [t.to_dict() for t in blocked]
-
-    output_context(context, fmt=fmt)
+    """Get full context for a project (alias for top-level 'context')."""
+    ctx.invoke(agent_context, project_id=project_id)
 
 
 @project.command("init")
@@ -511,10 +486,12 @@ def project_doctor(ctx: click.Context, project_id: str | None) -> None:
 # ============================================================================
 
 
-@main.group()
-def tasks() -> None:
-    """Manage tasks."""
-    pass
+@main.group(invoke_without_command=True)
+@click.pass_context
+def tasks(ctx: click.Context) -> None:
+    """Manage tasks (bare 'tasks' = list open+progress+blocked)."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(tasks_list)
 
 
 @tasks.command("list")
@@ -522,20 +499,28 @@ def tasks() -> None:
 @click.option(
     "--state", "-s",
     type=click.Choice(["open", "progress", "done", "blocked", "all"]),
-    default="all",
-    help="Filter by state",
+    default=None,
+    help="Filter by state (default: all except done)",
 )
 @click.option("--flat", is_flag=True, help="Show flat list without hierarchy")
 @click.pass_context
-def tasks_list(ctx: click.Context, project_id: str | None, state: str, flat: bool) -> None:
-    """List tasks for a project (filter with -s open|progress|done|blocked)."""
+def tasks_list(ctx: click.Context, project_id: str | None, state: str | None, flat: bool) -> None:
+    """List tasks for a project (default: open+progress+blocked, use -s all for everything)."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
-    
+
     project_id, _ = require_project(ctx, project_id)
 
-    state_filter = None if state == "all" else TaskState(state)
-    found_tasks = list_tasks(config, project_id, state_filter=state_filter)
+    if state == "all":
+        found_tasks = list_tasks(config, project_id, state_filter=None)
+    elif state is None:
+        # Default: show everything except done
+        found_tasks = []
+        for s in (TaskState.OPEN, TaskState.PROGRESS, TaskState.BLOCKED):
+            found_tasks.extend(list_tasks(config, project_id, state_filter=s))
+        found_tasks.sort(key=lambda t: (t.priority, t.id))
+    else:
+        found_tasks = list_tasks(config, project_id, state_filter=TaskState(state))
 
     output_tasks_list(found_tasks, fmt=fmt, flat=flat)
 
@@ -558,6 +543,53 @@ def tasks_show(ctx: click.Context, project_id: str | None, task_id: str) -> None
         sys.exit(1)
 
     output_task_detail(task, fmt=fmt)
+
+
+@tasks.command("edit")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.argument("task_id")
+@click.option("--title", "-t", help="New title")
+@click.option("--priority", type=int, help="New priority (1-10)")
+@click.option("--complexity", "-c", type=click.Choice(["s", "m", "l", "xl"]), help="New complexity")
+@click.option("--body", "-b", help="New body content (replaces description before ## sections)")
+@click.pass_context
+def tasks_edit(
+    ctx: click.Context,
+    project_id: str | None,
+    task_id: str,
+    title: str | None,
+    priority: int | None,
+    complexity: str | None,
+    body: str | None,
+) -> None:
+    """Edit task metadata (title, priority, complexity, body)."""
+    fmt = get_format(ctx)
+    config = require_portfolio(ctx)
+
+    project_id, _ = require_project(ctx, project_id)
+    task_id = expand_task_id(task_id, project_id)
+
+    if not any([title, priority is not None, complexity, body]):
+        output_error("no_changes", "Specify at least one field to edit (--title, --priority, --complexity, --body)", fmt=fmt)
+        sys.exit(1)
+
+    cmplx = TaskComplexity(complexity) if complexity else None
+
+    task = edit_task(
+        config,
+        project_id,
+        task_id,
+        title=title,
+        priority=priority,
+        complexity=cmplx,
+        body=body,
+    )
+
+    if not task:
+        output_error("task_not_found", f"No task with id '{task_id}' in project '{project_id}'", fmt=fmt)
+        sys.exit(1)
+
+    output_success(f"Task {task_id} updated", data=task.to_dict(), fmt=fmt)
 
 
 @tasks.command("state")
@@ -1034,7 +1066,7 @@ def agent_context(ctx: click.Context, project_id: str | None, log_limit: int) ->
             except Exception:
                 pass
     
-    output_json(context)
+    output_context(context, fmt=fmt)
 
 
 # ============================================================================
@@ -1053,7 +1085,7 @@ def log() -> None:
 @click.option("--task", "-t", "task_id", help="Task ID")
 @click.option(
     "--action", "-a",
-    type=click.Choice(["start", "progress", "done", "blocked", "pause", "research", "note"]),
+    type=click.Choice(["start", "progress", "done", "blocked", "commit", "pause", "research", "note"]),
     required=True,
     help="Action type",
 )
@@ -1120,19 +1152,24 @@ def log_add(
 
 
 @log.command("tail")
-@click.option("--project", "-p", "project_id", help="Filter by project")
+@click.option("--project", "-p", "project_id", help="Filter by project (auto-detected from cwd)")
 @click.option("--limit", "-n", type=int, default=20, help="Number of entries")
 @click.option("--follow", "-f", is_flag=True, help="Follow log output (like tail -f)")
+@click.option("--all", "-a", "show_all", is_flag=True, help="Show all projects (skip auto-detection)")
 @click.pass_context
-def log_tail(ctx: click.Context, project_id: str | None, limit: int, follow: bool) -> None:
-    """Show recent work log entries."""
+def log_tail(ctx: click.Context, project_id: str | None, limit: int, follow: bool, show_all: bool) -> None:
+    """Show recent work log entries (auto-filters to current project)."""
     import time
     import json as json_module
     from .models import WorkLogEntry
     from .worklog import get_worklog_path
-    
+
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+
+    # Auto-detect project from cwd unless --all or explicit --project
+    if not project_id and not show_all:
+        project_id, source = require_project(ctx, None, required=False, auto_init=False)
 
     entries = tail_entries(config, project=project_id, limit=limit)
     output_worklog_entries(entries, fmt=fmt)
@@ -1187,12 +1224,17 @@ def log_tail(ctx: click.Context, project_id: str | None, limit: int, follow: boo
 
 
 @log.command("last")
-@click.option("--project", "-p", "project_id", help="Filter by project")
+@click.option("--project", "-p", "project_id", help="Filter by project (auto-detected from cwd)")
+@click.option("--all", "-a", "show_all", is_flag=True, help="Show global last (skip auto-detection)")
 @click.pass_context
-def log_last(ctx: click.Context, project_id: str | None) -> None:
-    """Show the most recent work log entry."""
+def log_last(ctx: click.Context, project_id: str | None, show_all: bool) -> None:
+    """Show the most recent work log entry (auto-filters to current project)."""
     fmt = get_format(ctx)
     config = require_portfolio(ctx)
+
+    # Auto-detect project from cwd unless --all or explicit --project
+    if not project_id and not show_all:
+        project_id, source = require_project(ctx, None, required=False, auto_init=False)
 
     entry = get_last_entry(config, project=project_id)
 
@@ -1203,6 +1245,142 @@ def log_last(ctx: click.Context, project_id: str | None) -> None:
             output_json(None)
         else:
             click.echo("No entries found")
+
+
+@log.command("commit")
+@click.option("--project", "-p", "project_id", help="Project ID (auto-detected if not specified)")
+@click.option("--limit", "-n", type=int, default=10, help="Number of recent commits to check")
+@click.option("--task", "-t", "task_id", help="Associate commits with a task")
+@click.option("--dry-run", is_flag=True, help="Show what would be logged without logging")
+@click.pass_context
+def log_commit(ctx: click.Context, project_id: str | None, limit: int, task_id: str | None, dry_run: bool) -> None:
+    """Log recent git commits to work log (pull-based, deduplicates)."""
+    fmt = get_format(ctx)
+    config = require_portfolio(ctx)
+
+    project_id, _ = require_project(ctx, project_id)
+
+    # Expand task ID if provided
+    if task_id:
+        task_id = expand_task_id(task_id, project_id)
+
+    proj = get_project(config, project_id)
+    if not proj:
+        output_error("project_not_found", f"Project '{project_id}' not found", fmt=fmt)
+        sys.exit(1)
+
+    repo_path = proj.repo_path or proj.project_dir
+    if not repo_path or not repo_path.exists():
+        output_error("no_repo", f"No repo path for project '{project_id}'", fmt=fmt)
+        sys.exit(1)
+
+    # Get recent commits: hash, ISO date, subject
+    try:
+        result = subprocess.run(
+            ["git", "log", f"-{limit}", "--format=%H%x00%aI%x00%s"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            output_error("git_error", f"git log failed: {result.stderr.strip()}", fmt=fmt)
+            sys.exit(1)
+    except Exception as e:
+        output_error("git_error", f"Failed to run git: {e}", fmt=fmt)
+        sys.exit(1)
+
+    commits = []
+    for line in result.stdout.strip().split('\n'):
+        if not line:
+            continue
+        parts = line.split('\x00', 2)
+        if len(parts) == 3:
+            commits.append({"hash": parts[0], "date": parts[1], "subject": parts[2]})
+
+    if not commits:
+        output_success("No commits found", fmt=fmt)
+        return
+
+    # Get already-logged hashes
+    logged_hashes = get_logged_commit_hashes(config, project=project_id)
+
+    # Filter to new commits only
+    new_commits = [c for c in commits if c["hash"] not in logged_hashes]
+
+    if not new_commits:
+        output_success("All recent commits already logged", fmt=fmt)
+        return
+
+    if dry_run:
+        result_data = {"would_log": len(new_commits), "commits": new_commits}
+        if fmt == OutputFormat.JSON:
+            output_json(result_data)
+        else:
+            click.echo(f"Would log {len(new_commits)} commit(s):")
+            for c in new_commits:
+                click.echo(f"  {c['hash'][:8]} {c['subject']}")
+        return
+
+    # Log each new commit (oldest first)
+    logged = []
+    for commit in reversed(new_commits):
+        # Get files changed in this commit
+        try:
+            files_result = subprocess.run(
+                ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", commit["hash"]],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            files_changed = None
+            if files_result.returncode == 0 and files_result.stdout.strip():
+                files_changed = [line for line in files_result.stdout.strip().split('\n') if line]
+        except Exception:
+            files_changed = None
+
+        # Parse commit timestamp
+        from datetime import datetime, timezone
+        try:
+            commit_ts = datetime.fromisoformat(commit["date"])
+        except (ValueError, TypeError):
+            commit_ts = datetime.now(timezone.utc)
+
+        # Extract task ID from commit message if not explicitly provided
+        effective_task = task_id
+        if not effective_task:
+            # Look for PROJ-NNN pattern in commit message
+            import re
+            task_match = re.search(r'\b([A-Z]+-\d{3})\b', commit["subject"])
+            if task_match:
+                effective_task = task_match.group(1)
+
+        entry = add_entry(
+            config,
+            project=project_id,
+            action=WorkLogAction.COMMIT,
+            task=effective_task,
+            summary=commit["subject"],
+            files_changed=files_changed,
+            commit_hash=commit["hash"],
+            auto=True,
+            ts=commit_ts,
+        )
+        logged.append(entry)
+
+    result_data = {
+        "logged": len(logged),
+        "skipped": len(commits) - len(new_commits),
+        "entries": [e.to_dict() for e in logged],
+    }
+
+    if fmt == OutputFormat.JSON:
+        output_json(result_data)
+    else:
+        click.echo(f"Logged {len(logged)} commit(s), skipped {len(commits) - len(new_commits)} already logged")
+        for e in logged:
+            click.echo(f"  {e.commit_hash[:8] if e.commit_hash else '?'} {e.summary}")
 
 
 # ============================================================================

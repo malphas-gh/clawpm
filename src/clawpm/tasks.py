@@ -350,6 +350,78 @@ def add_task(
     return Task.from_file(file_path)
 
 
+def edit_task(
+    config: PortfolioConfig,
+    project_id: str,
+    task_id: str,
+    title: str | None = None,
+    priority: int | None = None,
+    complexity: TaskComplexity | None = None,
+    body: str | None = None,
+) -> Task | None:
+    """Edit task metadata (frontmatter) and optionally title/body."""
+    task = get_task(config, project_id, task_id)
+    if not task or not task.file_path:
+        return None
+
+    text = task.file_path.read_text()
+
+    # Parse frontmatter and content
+    frontmatter: dict = {}
+    content = text
+
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            try:
+                frontmatter = yaml.safe_load(parts[1]) or {}
+                content = parts[2]
+            except yaml.YAMLError:
+                pass
+
+    # Update frontmatter fields
+    if priority is not None:
+        frontmatter["priority"] = priority
+    if complexity is not None:
+        frontmatter["complexity"] = complexity.value
+
+    # Update title in content (first # heading)
+    if title is not None:
+        lines = content.split("\n")
+        replaced = False
+        for i, line in enumerate(lines):
+            if line.startswith("# "):
+                lines[i] = f"# {title}"
+                replaced = True
+                break
+        if not replaced:
+            lines.insert(0, f"# {title}")
+        content = "\n".join(lines)
+
+    # Replace body (everything between title and ## sections)
+    if body is not None:
+        lines = content.split("\n")
+        title_idx = None
+        section_idx = None
+        for i, line in enumerate(lines):
+            if line.startswith("# ") and title_idx is None:
+                title_idx = i
+            elif line.startswith("## ") and title_idx is not None:
+                section_idx = i
+                break
+
+        if title_idx is not None:
+            before = lines[:title_idx + 1]
+            after = lines[section_idx:] if section_idx is not None else []
+            content = "\n".join(before) + f"\n\n{body}\n\n" + "\n".join(after)
+
+    # Rebuild file
+    new_text = f"---\n{yaml.dump(frontmatter, default_flow_style=False).strip()}\n---\n{content}"
+    task.file_path.write_text(new_text)
+
+    return Task.from_file(task.file_path)
+
+
 def split_task(
     config: PortfolioConfig,
     project_id: str,

@@ -26,10 +26,12 @@ def add_entry(
     agent: str = "main",
     session_key: str | None = None,
     auto: bool = False,
+    commit_hash: str | None = None,
+    ts: datetime | None = None,
 ) -> WorkLogEntry:
     """Add an entry to the work log."""
     entry = WorkLogEntry(
-        ts=datetime.now(timezone.utc),
+        ts=ts or datetime.now(timezone.utc),
         project=project,
         action=action,
         task=task,
@@ -40,6 +42,7 @@ def add_entry(
         agent=agent,
         session_key=session_key,
         auto=auto,
+        commit_hash=commit_hash,
     )
 
     worklog_path = get_worklog_path(config)
@@ -103,6 +106,32 @@ def get_last_entry(
     """Get the most recent work log entry."""
     entries = read_entries(config, project=project, limit=1)
     return entries[0] if entries else None
+
+
+def get_logged_commit_hashes(
+    config: PortfolioConfig,
+    project: str | None = None,
+) -> set[str]:
+    """Get set of commit hashes already logged (from commit_hash field)."""
+    worklog_path = get_worklog_path(config)
+    if not worklog_path.exists():
+        return set()
+
+    hashes: set[str] = set()
+    with open(worklog_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                if data.get("action") == "commit" and data.get("commit_hash"):
+                    if project is None or data.get("project") == project:
+                        hashes.add(data["commit_hash"])
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    return hashes
 
 
 def tail_entries(

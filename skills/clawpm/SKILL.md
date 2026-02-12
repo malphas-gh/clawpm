@@ -64,6 +64,8 @@ ClawPM automatically detects your project from (in priority order):
 4. **Auto-init**: If in untracked git repo under project_roots, auto-initializes
 5. **Context**: Previously set with `clawpm use <project>`
 
+When auto-detected (from cwd or context), a hint is shown on stderr: `Using project: clawpm (from cwd)`
+
 ```bash
 # From project directory - auto-detects:
 cd ~/Development/clawpm
@@ -163,12 +165,18 @@ clawpm tasks split <id>                 # Convert to parent directory for subtas
 ### Work Log
 ```bash
 clawpm log add --task <id> --action progress --summary "What I did"
-clawpm log tail [--limit 10]            # Recent entries
+clawpm log tail [--limit 10]            # Recent entries (auto-filtered to current project)
+clawpm log tail --all                   # Recent entries across all projects
 clawpm log tail --follow                # Live tail (like tail -f)
-clawpm log last                         # Most recent entry
+clawpm log last                         # Most recent entry (auto-filtered to current project)
+clawpm log last --all                   # Most recent entry across all projects
+clawpm log commit [-n 10]               # Log recent git commits to work log
+clawpm log commit --dry-run             # Preview without logging
+clawpm log commit --task <id>           # Associate commits with a task
 ```
 
 Note: State changes (start/done/block) auto-log to work_log with git files_changed.
+Note: `log tail` and `log last` auto-filter to the current project (from cwd). Use `--all` for global view.
 
 ### Research
 ```bash
@@ -211,6 +219,7 @@ clawpm start 42            # Mark in progress (auto-logs)
 ```bash
 git add . && git commit -m "feat: ..."
 clawpm done 42 --note "Completed"       # Auto-logs with files_changed
+clawpm log commit                        # Also log the git commits themselves
 ```
 
 ### Hit a Blocker
@@ -246,11 +255,13 @@ tasks/
 - `progress` - Made progress
 - `done` - Completed (auto-logged on `clawpm done`)
 - `blocked` - Hit a blocker (auto-logged on `clawpm block`)
+- `commit` - Git commit (logged via `clawpm log commit`, includes `commit_hash` and `files_changed`)
 - `pause` - Switching tasks
 - `research` - Research note
 - `note` - General observation
 
 Auto-logged entries include `"auto": true` and `files_changed` from git.
+Commit entries also include `"commit_hash"` and auto-extract task IDs from commit messages.
 
 ## Tips
 

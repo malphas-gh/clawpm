@@ -45,6 +45,7 @@ class WorkLogAction(str, Enum):
     PAUSE = "pause"
     RESEARCH = "research"
     NOTE = "note"
+    COMMIT = "commit"
 
 
 class ResearchType(str, Enum):
@@ -258,6 +259,7 @@ class WorkLogEntry:
     files_changed: list[str] | None = None
     blockers: str | None = None
     auto: bool = False  # True for auto-generated entries (state changes)
+    commit_hash: str | None = None  # Git commit hash (for action=commit)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON output."""
@@ -275,6 +277,8 @@ class WorkLogEntry:
         }
         if self.auto:
             result["auto"] = True
+        if self.commit_hash:
+            result["commit_hash"] = self.commit_hash
         return result
 
     @classmethod
@@ -298,6 +302,7 @@ class WorkLogEntry:
             files_changed=data.get("files_changed"),
             blockers=data.get("blockers"),
             auto=data.get("auto", False),
+            commit_hash=data.get("commit_hash"),
         )
 
 

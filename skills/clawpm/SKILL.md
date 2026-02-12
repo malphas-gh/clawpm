@@ -269,6 +269,7 @@ Commit entries also include `"commit_hash"` and auto-extract task IDs from commi
 ## Tips
 
 - **JSON output**: All commands emit JSON by default; use `-f text` for human-readable
+- **One command per call**: Don't chain clawpm commands with `&&` and pipe the last one — the pipe may receive empty input in sandboxed environments. Run each command separately instead
 - **Portfolio root**: Must be OUTSIDE OpenClaw workspace
 - **Work log**: Append-only at `~/clawpm/work_log.jsonl`
 - **Live monitoring**: `clawpm log tail -f` for real-time log watching

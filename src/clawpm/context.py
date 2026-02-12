@@ -142,27 +142,32 @@ def get_project_prefix(project_id: str) -> str:
 
 def expand_task_id(task_ref: str, project_id: str) -> str:
     """Expand a short task reference to full ID.
-    
+
     Examples:
         - "22" -> "CLAWP-022" (for clawpm project)
         - "CLAWP-022" -> "CLAWP-022" (already full)
         - "022" -> "CLAWP-022"
+        - "4-001" -> "CLAWP-004-001" (subtask)
+        - "CLAWP-004-001" -> "CLAWP-004-001" (already full subtask)
     """
     # Already has a prefix (contains hyphen and letters before it)
-    if '-' in task_ref and re.match(r'^[A-Z]+-\d+$', task_ref.upper()):
+    # Match both PREFIX-NNN and PREFIX-NNN-NNN (subtask)
+    if '-' in task_ref and re.match(r'^[A-Z]+-\d+(-\d+)?$', task_ref.upper()):
         return task_ref.upper()
-    
+
+    # Subtask short ID: "4-001" or "004-001" -> "PREFIX-004-001"
+    subtask_match = re.match(r'^(\d+)-(\d+)$', task_ref)
+    if subtask_match:
+        prefix = get_project_prefix(project_id)
+        parent_num = int(subtask_match.group(1))
+        sub_num = int(subtask_match.group(2))
+        return f"{prefix}-{parent_num:03d}-{sub_num:03d}"
+
     # Pure numeric - expand with project prefix
     if task_ref.isdigit():
         prefix = get_project_prefix(project_id)
         num = int(task_ref)
         return f"{prefix}-{num:03d}"
-    
-    # Might be just the number part with leading zeros
-    if re.match(r'^\d+$', task_ref):
-        prefix = get_project_prefix(project_id)
-        num = int(task_ref)
-        return f"{prefix}-{num:03d}"
-    
+
     # Return as-is if unrecognized format
     return task_ref

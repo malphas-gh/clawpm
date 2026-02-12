@@ -227,9 +227,30 @@ class Task:
             file_path=path,
         )
 
+    @property
+    def body(self) -> str | None:
+        """Extract body text (between title and first ## section)."""
+        if not self.content:
+            return None
+        lines = self.content.split("\n")
+        title_idx = None
+        section_idx = None
+        for i, line in enumerate(lines):
+            if line.startswith("# ") and title_idx is None:
+                title_idx = i
+            elif line.startswith("## ") and title_idx is not None:
+                section_idx = i
+                break
+        if title_idx is None:
+            return None
+        start = title_idx + 1
+        end = section_idx if section_idx is not None else len(lines)
+        body = "\n".join(lines[start:end]).strip()
+        return body if body else None
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON output."""
-        return {
+        result = {
             "id": self.id,
             "title": self.title,
             "state": self.state.value,
@@ -242,6 +263,10 @@ class Task:
             "created": self.created,
             "file_path": str(self.file_path) if self.file_path else None,
         }
+        body = self.body
+        if body:
+            result["body"] = body
+        return result
 
 
 @dataclass

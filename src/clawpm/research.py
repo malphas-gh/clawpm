@@ -99,7 +99,8 @@ def add_research(
         # Use date + slugified title
         slug = title.lower()
         slug = "".join(c if c.isalnum() else "-" for c in slug)
-        slug = "-".join(filter(None, slug.split("-")))[:30]
+        slug = "-".join(filter(None, slug.split("-")))[:50]
+        slug = slug.rstrip("-")
         research_id = f"{project_id}-research-{slug}"
 
     # Build frontmatter

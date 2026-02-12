@@ -634,6 +634,7 @@ def tasks_state(ctx: click.Context, project_id: str | None, task_id: str, new_st
 
     # Auto-log state change
     action_map = {
+        TaskState.OPEN: WorkLogAction.NOTE,
         TaskState.PROGRESS: WorkLogAction.START,
         TaskState.DONE: WorkLogAction.DONE,
         TaskState.BLOCKED: WorkLogAction.BLOCKED,

@@ -80,18 +80,25 @@ rg -g '!*.min.js' 'pattern' .           # Exclude minified JS
 
 ### Running clawpm
 
-Wrapper script at `~/.local/bin/clawpm`:
+Installed via uv tool:
 ```bash
-#!/bin/bash
-uv run --directory ~/clawpm/projects/clawpm clawpm "$@"
+uv tool install ~/clawpm/projects/clawpm
 ```
 
-This runs from source - no install needed, changes are picked up immediately.
+This creates `~/.local/bin/clawpm`. After edits, reinstall to pick up changes:
+```bash
+uv tool install --force ~/clawpm/projects/clawpm
+```
+
+Or test without reinstalling:
+```bash
+uv run --directory ~/clawpm/projects/clawpm clawpm <args>
+```
 
 ### Making Changes
 
 1. Edit source in `~/clawpm/projects/clawpm/src/clawpm/`
-2. Test immediately with `uv run` - no reinstall needed
+2. Test with `uv run` or reinstall with `uv tool install --force`
 3. **Commit when done** - don't leave fixes uncommitted:
    ```bash
    git add <files>

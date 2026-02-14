@@ -720,7 +720,6 @@ def tasks_add(
     elif body_file:
         task_body = Path(body_file).read_text()
     elif read_stdin:
-        import sys
         task_body = sys.stdin.read()
     elif description:
         task_body = description

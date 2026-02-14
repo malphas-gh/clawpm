@@ -5,12 +5,13 @@ You are validating that ClawPM works correctly by using it as a real agent would
 ## Before You Start
 
 1. **Load the skill:** Read `skills/clawpm/SKILL.md` in this repo. That is your sole reference for all ClawPM commands. Do not guess flags or syntax — if the skill doesn't document it, that's a finding.
-2. **Create a test project:** Make a new directory at `~/Development/clawpm-test`, initialize it as a git repo, and work from there for the rest of the test.
+2. **Run first-time setup:** Follow the skill's setup instructions to create the portfolio. Verify it created the expected structure.
+3. **Create a test project:** Make a new directory under the portfolio's projects folder and work from there for the rest of the test. The project does **not** need to be a git repo.
 
 ## Phase 1: Project Setup
 
 Using ClawPM from inside your test project directory:
-- Quick-add a task called "Initial setup". This should auto-initialize the project.
+- Initialize the project
 - Verify the project was created (check for `.project/` directory)
 - List all projects in the portfolio — your test project should appear
 - Check the project status
@@ -37,7 +38,7 @@ Using ClawPM from inside your test project directory:
 
 - Add subtasks to one of the remaining open tasks
 - List tasks and check the hierarchy is visible
-- Try to complete the parent while subtasks are still open
+- Try to complete the parent while subtasks are still open (should fail)
 - Complete the subtasks, then the parent
 
 ## Phase 5: Work Log
@@ -46,10 +47,13 @@ Using ClawPM from inside your test project directory:
 - View the recent log — it should only show entries for your test project
 - View the log across all projects
 - View the single most recent entry
+
+### Git commit logging (optional — only if test project is a git repo)
+
 - Make a couple of git commits in the test repo (include a task ID in one commit message)
 - Use the commit logging feature to pull git commits into the work log
-- Run it again — duplicates should be skipped
 - Try a dry-run first to preview
+- Run it again — duplicates should be skipped
 
 ## Phase 6: Context & Navigation
 
@@ -66,8 +70,9 @@ Using ClawPM from inside your test project directory:
 
 ## Phase 8: Cross-Project
 
-- Access a different project (e.g. `clawpm` itself) by name while still in your test directory
+- Set a project context while outside a project directory
 - Get the next task across all projects in the portfolio
+- Clear the context
 
 ## Phase 9: Output & Error Handling
 
@@ -94,4 +99,3 @@ Summarize your findings:
 - UX observations: (anything that felt unintuitive or broken)
 ```
 
-If you find bugs or SKILL.md mismatches, log them using ClawPM's issue tracking against the `clawpm` project. If a fix is straightforward, apply it in `src/clawpm/` and re-test.

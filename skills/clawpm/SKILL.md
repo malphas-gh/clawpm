@@ -69,7 +69,7 @@ When auto-detected (from cwd or context), a hint is shown on stderr: `Using proj
 
 ```bash
 # From project directory - auto-detects:
-cd ~/Development/clawpm
+cd ~/clawpm/projects/clawpm
 clawpm status              # Uses clawpm automatically
 
 # Auto-init from new git clone:
@@ -208,7 +208,7 @@ Extracts full conversation transcripts (user messages, assistant text, tool call
 - `.jsonl` — linearized transcript for machine consumption
 - `.md` — readable markdown with full conversation flow
 
-Output: `~/Development/clawpm/logs/sessions/` (processed sessions move to `processed/` subdirectory).
+Output: `~/clawpm/logs/sessions/` (processed sessions move to `processed/` subdirectory).
 Index file `index.jsonl` tracks what's extracted — agent can check this to find unprocessed sessions.
 
 ### Admin

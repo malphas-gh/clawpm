@@ -28,4 +28,4 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Run from original directory, but tell uv where the project is
-(cd "$$ORIGINAL_PWD" && uv run --project ~/Development/clawpm clawpm "$${resolved_args[@]}")
+(cd "$$ORIGINAL_PWD" && uv run --project ~/clawpm/projects/clawpm clawpm "$${resolved_args[@]}")

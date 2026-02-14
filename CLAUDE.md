@@ -36,43 +36,28 @@ clawpm --format text <command>
 ## Directory Structure
 
 ```
-~/Development/clawpm/          # Source code
-├── src/clawpm/
-│   ├── cli.py                 # Click CLI commands
-│   ├── models.py              # Pydantic-style dataclasses
-│   ├── discovery.py           # Portfolio/project discovery
-│   ├── tasks.py               # Task CRUD + state transitions
-│   ├── worklog.py             # Work log operations
-│   ├── research.py            # Research operations
-│   └── output.py              # JSON/text formatting with rich
-├── skills/clawpm/SKILL.md     # OpenClaw skill
-├── hooks/clawpm-sync/         # OpenClaw hook
-├── .project/                  # ClawPM manages itself
-└── .agent/                    # Agent testing protocol
-
 ~/clawpm/                      # Portfolio (hardcoded default)
 ├── portfolio.toml
 ├── work_log.jsonl
 └── projects/
+    └── clawpm/                # Source code
+        ├── src/clawpm/
+        │   ├── cli.py                 # Click CLI commands
+        │   ├── models.py              # Pydantic-style dataclasses
+        │   ├── discovery.py           # Portfolio/project discovery
+        │   ├── tasks.py               # Task CRUD + state transitions
+        │   ├── worklog.py             # Work log operations
+        │   ├── research.py            # Research operations
+        │   └── output.py              # JSON/text formatting with rich
+        ├── skills/clawpm/SKILL.md     # OpenClaw skill
+        ├── hooks/clawpm-sync/         # OpenClaw hook
+        ├── .project/                  # ClawPM manages itself
+        └── .agent/                    # Agent testing protocol
 
-~/Development/clawpm/openclaw
-    ├── apps/
-    ├── assets/
-    ├── docs/                     # Primary documentation (markdown)
-    ├── extensions/
-    ├── git-hooks/
-    ├── packages/
-    ├── patches/
-    ├── scripts/
-    ├── skills/
-    ├── src/                      # Source code
-    ├── Swabble/
-    ├── test/
-    ├── ui/
-    ├── vendor/
-    ├──llms.txt # URL list of documentation
-    ├──llms-full.txt # ⚠️ LARGE - merged docs, search only 
 ```
+
+OpenClaw installed via npm at `~/.npm-global/lib/node_modules/openclaw/`
+Docs: `~/.npm-global/lib/node_modules/openclaw/docs/`
 
 ## Searching Documentation
 ```bash
@@ -98,14 +83,14 @@ rg -g '!*.min.js' 'pattern' .           # Exclude minified JS
 Wrapper script at `~/.local/bin/clawpm`:
 ```bash
 #!/bin/bash
-uv run --directory ~/Development/clawpm clawpm "$@"
+uv run --directory ~/clawpm/projects/clawpm clawpm "$@"
 ```
 
 This runs from source - no install needed, changes are picked up immediately.
 
 ### Making Changes
 
-1. Edit source in `~/Development/clawpm/src/clawpm/`
+1. Edit source in `~/clawpm/projects/clawpm/src/clawpm/`
 2. Test immediately with `uv run` - no reinstall needed
 3. **Commit when done** - don't leave fixes uncommitted:
    ```bash
@@ -146,8 +131,8 @@ Located at `hooks/clawpm-sync/`, installed to `~/.openclaw/hooks/clawpm-sync`
 - **Setup**: Real directory with symlinked files (not a directory symlink - OpenClaw won't discover those)
   ```bash
   mkdir -p ~/.openclaw/hooks/clawpm-sync
-  ln -s ~/Development/clawpm/hooks/clawpm-sync/HOOK.md ~/.openclaw/hooks/clawpm-sync/HOOK.md
-  ln -s ~/Development/clawpm/hooks/clawpm-sync/handler.ts ~/.openclaw/hooks/clawpm-sync/handler.ts
+  ln -s ~/clawpm/projects/clawpm/hooks/clawpm-sync/HOOK.md ~/.openclaw/hooks/clawpm-sync/HOOK.md
+  ln -s ~/clawpm/projects/clawpm/hooks/clawpm-sync/handler.ts ~/.openclaw/hooks/clawpm-sync/handler.ts
   ```
 - Triggers on `command:new` and `command:stop`
 - Auto-logs session events to work_log.jsonl

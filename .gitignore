@@ -12,3 +12,6 @@ htmlcov/
 
 logs/
 uv.lock
+
+.project/
+.agent/

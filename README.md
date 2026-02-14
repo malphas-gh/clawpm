@@ -60,8 +60,7 @@ Or create `~/clawpm/portfolio.toml`:
 ```toml
 portfolio_root = "~/clawpm"
 project_roots = [
-    "~/clawpm/projects",
-    "~/Development"
+    "~/clawpm/projects"
 ]
 
 [openclaw]

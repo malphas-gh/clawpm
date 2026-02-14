@@ -1518,7 +1518,7 @@ def sessions() -> None:
 
 @sessions.command("extract")
 @click.option("--output-dir", "-o", type=click.Path(), default=None,
-              help="Output directory (default: ~/Development/clawpm/logs/sessions)")
+              help="Output directory (default: ~/clawpm/logs/sessions)")
 @click.option("--output-limit", "-l", type=int, default=DEFAULT_OUTPUT_LIMIT,
               help=f"Truncate tool outputs to N chars (default: {DEFAULT_OUTPUT_LIMIT})")
 @click.option("--force", is_flag=True, help="Re-extract sessions that already exist")
@@ -1543,7 +1543,7 @@ def sessions_extract(ctx: click.Context, output_dir: str | None, output_limit: i
     if output_dir:
         out = Path(output_dir)
     else:
-        out = Path.home() / "Development" / "clawpm" / "logs" / "sessions"
+        out = Path.home() / "clawpm" / "logs" / "sessions"
 
     results = extract_sessions(out, output_limit=output_limit, force=force)
 
@@ -1573,7 +1573,7 @@ def sessions_extract(ctx: click.Context, output_dir: str | None, output_limit: i
 
 @sessions.command("list")
 @click.option("--output-dir", "-o", type=click.Path(), default=None,
-              help="Sessions directory (default: ~/Development/clawpm/logs/sessions)")
+              help="Sessions directory (default: ~/clawpm/logs/sessions)")
 @click.option("--processed", is_flag=True, help="Show processed sessions instead")
 @click.pass_context
 def sessions_list(ctx: click.Context, output_dir: str | None, processed: bool) -> None:
@@ -1585,7 +1585,7 @@ def sessions_list(ctx: click.Context, output_dir: str | None, processed: bool) -
     if output_dir:
         out = Path(output_dir)
     else:
-        out = Path.home() / "Development" / "clawpm" / "logs" / "sessions"
+        out = Path.home() / "clawpm" / "logs" / "sessions"
 
     index_path = out / "index.jsonl"
     index = load_index(index_path)
@@ -1644,7 +1644,7 @@ def sessions_list(ctx: click.Context, output_dir: str | None, processed: bool) -
 @sessions.command("process")
 @click.argument("session_ids", nargs=-1, required=False)
 @click.option("--output-dir", "-o", type=click.Path(), default=None,
-              help="Sessions directory (default: ~/Development/clawpm/logs/sessions)")
+              help="Sessions directory (default: ~/clawpm/logs/sessions)")
 @click.option("--all", "-a", "process_all", is_flag=True, help="Process all extracted sessions")
 @click.pass_context
 def sessions_process(ctx: click.Context, session_ids: tuple[str, ...], output_dir: str | None, process_all: bool) -> None:
@@ -1660,7 +1660,7 @@ def sessions_process(ctx: click.Context, session_ids: tuple[str, ...], output_di
     if output_dir:
         out = Path(output_dir)
     else:
-        out = Path.home() / "Development" / "clawpm" / "logs" / "sessions"
+        out = Path.home() / "clawpm" / "logs" / "sessions"
 
     processed_dir = out / "processed"
     processed_dir.mkdir(parents=True, exist_ok=True)

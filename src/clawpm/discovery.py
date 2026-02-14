@@ -27,35 +27,103 @@ class UntrackedRepo:
         }
 
 
-def get_portfolio_path() -> Path | None:
-    """Get the portfolio path from default location or environment override."""
-    # Default location: ~/clawpm
-    default = Path.home() / "clawpm"
-    if (default / "portfolio.toml").exists():
-        return default
+def path_for_config(p: Path) -> str:
+    """Convert a path to a config-friendly string, using ~/ when possible."""
+    try:
+        relative = p.relative_to(Path.home())
+        return f"~/{relative}"
+    except ValueError:
+        return str(p)
 
-    # Allow environment override (useful for testing)
+
+def get_portfolio_path() -> Path | None:
+    """Get the portfolio path from default location or environment override.
+    
+    Returns the portfolio root directory, or None if not found.
+    Note: Even if None is returned, load_portfolio_config() will use defaults.
+    """
+    # Environment override takes priority
     if env_path := os.environ.get("CLAWPM_PORTFOLIO"):
         path = Path(env_path).expanduser()
-        if (path / "portfolio.toml").exists():
+        if path.exists():
             return path
+
+    # Default location: ~/clawpm
+    default = Path.home() / "clawpm"
+    if default.exists():
+        return default
 
     return None
 
 
 def load_portfolio_config(portfolio_path: Path | None = None) -> PortfolioConfig | None:
-    """Load portfolio configuration."""
+    """Load portfolio configuration.
+    
+    If portfolio.toml exists, loads it. Otherwise creates a default config
+    with sensible defaults (~/clawpm/projects as project root).
+    
+    Environment variables:
+      CLAWPM_PORTFOLIO: Override portfolio root directory
+      CLAWPM_PROJECT_ROOTS: Colon-separated list of additional project roots
+      CLAWPM_WORKSPACE: Override OpenClaw workspace path
+    """
     if portfolio_path is None:
         portfolio_path = get_portfolio_path()
 
-    if portfolio_path is None:
-        return None
+    # Try loading from portfolio.toml if it exists
+    if portfolio_path:
+        config_file = portfolio_path / "portfolio.toml"
+        if config_file.exists():
+            config = PortfolioConfig.load(config_file)
+            # Merge in env var project roots
+            config = _merge_env_project_roots(config)
+            return config
 
-    config_file = portfolio_path / "portfolio.toml"
-    if not config_file.exists():
-        return None
+    # No portfolio.toml - use defaults
+    return _default_portfolio_config()
 
-    return PortfolioConfig.load(config_file)
+
+def _default_portfolio_config() -> PortfolioConfig:
+    """Create a default portfolio config with sensible defaults."""
+    from .models import PortfolioConfig, ProjectStatus
+    
+    portfolio_root = Path.home() / "clawpm"
+    
+    # Default project roots: ~/clawpm/projects
+    project_roots = [portfolio_root / "projects"]
+    
+    # Add any from environment
+    if env_roots := os.environ.get("CLAWPM_PROJECT_ROOTS"):
+        for root in env_roots.split(":"):
+            if root.strip():
+                project_roots.append(Path(root.strip()).expanduser())
+    
+    # OpenClaw workspace from env or default
+    openclaw_workspace = None
+    if ws := os.environ.get("CLAWPM_WORKSPACE"):
+        openclaw_workspace = Path(ws).expanduser()
+    else:
+        default_ws = Path.home() / ".openclaw" / "workspace"
+        if default_ws.exists():
+            openclaw_workspace = default_ws
+    
+    return PortfolioConfig(
+        portfolio_root=portfolio_root,
+        project_roots=project_roots,
+        default_status=ProjectStatus.ACTIVE,
+        openclaw_workspace=openclaw_workspace,
+    )
+
+
+def _merge_env_project_roots(config: PortfolioConfig) -> PortfolioConfig:
+    """Merge environment variable project roots into config."""
+    if env_roots := os.environ.get("CLAWPM_PROJECT_ROOTS"):
+        for root in env_roots.split(":"):
+            if root.strip():
+                path = Path(root.strip()).expanduser()
+                if path not in config.project_roots:
+                    config.project_roots.append(path)
+    return config
 
 
 def discover_projects(
@@ -256,11 +324,12 @@ def init_project_from_repo(repo_path: Path, project_id: str | None = None) -> Pr
     (project_dir / "notes").mkdir(exist_ok=True)
     
     # Write settings.toml
+    repo_path_str = path_for_config(repo_path)
     settings_content = f'''id = "{project_id}"
 name = "{project_name}"
 status = "active"
 priority = 5
-repo_path = "{repo_path}"
+repo_path = "{repo_path_str}"
 '''
     (project_dir / "settings.toml").write_text(settings_content)
     

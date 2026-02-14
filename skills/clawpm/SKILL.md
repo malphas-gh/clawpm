@@ -194,6 +194,23 @@ clawpm issues add --type bug --severity high --actual "What happened"
 clawpm issues list [--open]             # Open issues only
 ```
 
+### Sessions (transcript extraction)
+```bash
+clawpm sessions extract                # Extract OpenClaw sessions with clawpm calls
+clawpm sessions extract --force        # Re-extract all (overwrite existing)
+clawpm sessions list                   # List extracted sessions with stats
+clawpm sessions list --processed       # List already-processed sessions
+clawpm sessions process <id-prefix>    # Move session to processed/
+clawpm sessions process --all          # Move all extracted to processed/
+```
+
+Extracts full conversation transcripts (user messages, assistant text, tool calls + results) from OpenClaw sessions containing clawpm tool calls. Each session produces:
+- `.jsonl` — linearized transcript for machine consumption
+- `.md` — readable markdown with full conversation flow
+
+Output: `~/Development/clawpm/logs/sessions/` (processed sessions move to `processed/` subdirectory).
+Index file `index.jsonl` tracks what's extracted — agent can check this to find unprocessed sessions.
+
 ### Admin
 ```bash
 clawpm status              # Project overview

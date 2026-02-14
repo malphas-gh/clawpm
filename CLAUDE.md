@@ -36,7 +36,7 @@ clawpm --format text <command>
 ## Directory Structure
 
 ```
-~/clawpm/                      # Portfolio (hardcoded default)
+~/clawpm/                      # Portfolio (default, override via CLAWPM_PORTFOLIO)
 ├── portfolio.toml
 ├── work_log.jsonl
 └── projects/
@@ -123,7 +123,7 @@ See `.agent/TESTING.md` for the full testing protocol. Key points:
 
 1. **Filesystem is source of truth** - No database, everything in markdown/TOML/JSONL
 2. **JSON output by default** - All commands emit JSON for agent consumption
-3. **Portfolio at ~/clawpm** - Hardcoded default, no env var needed
+3. **Portfolio at ~/clawpm** - Default, override via `CLAWPM_PORTFOLIO` env var
 4. **work_log.jsonl** - Single append-only log for all projects (replaces per-project HANDOFF.md)
 5. **Project discovery** - Scans `project_roots` for directories with `.project/settings.toml`
 

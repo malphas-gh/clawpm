@@ -116,7 +116,7 @@ def require_portfolio(ctx: click.Context):
         fmt = get_format(ctx)
         output_error(
             "portfolio_not_found",
-            "No portfolio found at ~/clawpm. Run setup or create portfolio.toml.",
+            "No portfolio found at ~/clawpm (or CLAWPM_PORTFOLIO). Run setup or create portfolio.toml.",
             fmt=fmt,
         )
         sys.exit(1)
@@ -1730,7 +1730,7 @@ def setup(ctx: click.Context, check: bool) -> None:
         # Check portfolio path (defaults to ~/clawpm)
         portfolio_path = get_portfolio_path()
         if not portfolio_path:
-            issues.append("No portfolio found at ~/clawpm (portfolio.toml missing)")
+            issues.append("No portfolio found at ~/clawpm (or set CLAWPM_PORTFOLIO env var)")
         else:
             if not (portfolio_path / "work_log.jsonl").exists():
                 issues.append(f"work_log.jsonl not found in {portfolio_path}")
@@ -1759,10 +1759,10 @@ def setup(ctx: click.Context, check: bool) -> None:
     else:
         # Interactive setup - just show instructions for now
         if fmt == OutputFormat.JSON:
-            output_json({"message": "Create ~/clawpm/portfolio.toml to get started"})
+            output_json({"message": "Create ~/clawpm/portfolio.toml to get started (or set CLAWPM_PORTFOLIO)"})
         else:
             click.echo("Manual setup:")
-            click.echo("  1. Create ~/clawpm directory")
+            click.echo("  1. Create ~/clawpm directory (or set CLAWPM_PORTFOLIO env var)")
             click.echo("  2. Create portfolio.toml in that directory")
             click.echo("  3. Create projects/ subdirectory")
             click.echo("  4. Create work_log.jsonl (empty file)")

@@ -13,7 +13,7 @@ Use `clawpm` for multi-project task management. All commands emit JSON by defaul
 
 ```bash
 # If you're in a project directory, no --project needed:
-cd ~/Development/my-project
+cd ~/clawpm/projects/my-project
 clawpm status              # See project status
 clawpm next                # Get next task
 clawpm start 42            # Start task (short ID works)
@@ -73,7 +73,7 @@ cd ~/clawpm/projects/clawpm
 clawpm status              # Uses clawpm automatically
 
 # Auto-init from new git clone:
-cd ~/Development/new-repo  # Untracked git repo
+cd ~/clawpm/projects/new-repo  # Untracked git repo
 clawpm add "First task"    # Auto-initializes .project/, then adds task
 ```
 
@@ -112,8 +112,8 @@ Subtasks move with parent on state change (done/blocked moves entire directory).
 ### Auto-Init from Git Repo
 
 ```bash
-git clone git@github.com:user/repo.git ~/Development/repo
-cd ~/Development/repo
+git clone git@github.com:user/repo.git ~/clawpm/projects/repo
+cd ~/clawpm/projects/repo
 clawpm add "First task"    # Auto-initializes project
 ```
 
@@ -288,8 +288,9 @@ Commit entries also include `"commit_hash"` and auto-extract task IDs from commi
 - **Flag order**: `clawpm [global flags] <command> [command flags]` — e.g. `clawpm -f text tasks list -s open`
 - **JSON output**: All commands emit JSON by default; use `-f text` for human-readable
 - **One command per call**: Don't chain clawpm commands with `&&` and pipe the last one — the pipe may receive empty input in sandboxed environments. Run each command separately instead
-- **Portfolio root**: Must be OUTSIDE OpenClaw workspace
-- **Work log**: Append-only at `~/clawpm/work_log.jsonl`
+- **Portfolio root**: Default `~/clawpm`, override via `CLAWPM_PORTFOLIO` env var. Must be OUTSIDE OpenClaw workspace
+- **Extra project roots**: Set `CLAWPM_PROJECT_ROOTS` (colon-separated) or add to `project_roots` in `portfolio.toml`
+- **Work log**: Append-only at `<portfolio>/work_log.jsonl`
 - **Live monitoring**: `clawpm log tail -f` for real-time log watching
 - **Test changes**: When editing clawpm itself, test with `uv run clawpm ...` from the repo
 

@@ -4,8 +4,8 @@ You are testing ClawPM by using it for real work. This creates a feedback loop w
 
 ## Current State
 
-- **CLI**: `clawpm` via wrapper script at `~/.local/bin/clawpm`
-- **Portfolio**: `~/clawpm` (hardcoded default)
+- **CLI**: `clawpm` installed via `uv tool install` at `~/.local/bin/clawpm`
+- **Portfolio**: `~/clawpm` (default, override via `CLAWPM_PORTFOLIO` env var)
 - **Skill**: `~/.openclaw/skills/clawpm` (symlink)
 - **Hook**: Disabled - use explicit `clawpm log add` instead
 
@@ -126,7 +126,7 @@ clawpm issues list --project <id> --open  # unfixed only
 ## Fixing Issues
 
 1. Fix the code in `src/clawpm/`
-2. Test with `clawpm <command>` (wrapper runs from source)
+2. Test with `uv run clawpm <command>` or reinstall with `uv tool install --force`
 3. Update issue with `"fixed": true`
 4. Note fix in commit or experiments.md
 

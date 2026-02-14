@@ -1,0 +1,333 @@
+"""Data models for ClawPM."""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
+import yaml
+
+
+class ProjectStatus(str, Enum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    ARCHIVED = "archived"
+
+
+class TaskState(str, Enum):
+    OPEN = "open"
+    PROGRESS = "progress"
+    DONE = "done"
+    BLOCKED = "blocked"
+
+
+class TaskComplexity(str, Enum):
+    S = "s"
+    M = "m"
+    L = "l"
+    XL = "xl"
+
+
+class WorkLogAction(str, Enum):
+    START = "start"
+    PROGRESS = "progress"
+    DONE = "done"
+    BLOCKED = "blocked"
+    PAUSE = "pause"
+    RESEARCH = "research"
+    NOTE = "note"
+
+
+class ResearchType(str, Enum):
+    INVESTIGATION = "investigation"
+    SPIKE = "spike"
+    DECISION = "decision"
+    REFERENCE = "reference"
+
+
+class ResearchStatus(str, Enum):
+    OPEN = "open"
+    COMPLETE = "complete"
+    STALE = "stale"
+
+
+@dataclass
+class PortfolioConfig:
+    """Portfolio configuration from portfolio.toml."""
+
+    portfolio_root: Path
+    project_roots: list[Path]
+    default_status: ProjectStatus = ProjectStatus.ACTIVE
+    openclaw_workspace: Path | None = None
+
+    @classmethod
+    def load(cls, path: Path) -> PortfolioConfig:
+        """Load portfolio config from TOML file."""
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+
+        portfolio_root = Path(data.get("portfolio_root", path.parent)).expanduser()
+        project_roots = [
+            Path(p).expanduser() for p in data.get("project_roots", [])
+        ]
+
+        defaults = data.get("defaults", {})
+        default_status = ProjectStatus(defaults.get("status", "active"))
+
+        openclaw = data.get("openclaw", {})
+        openclaw_workspace = None
+        if ws := openclaw.get("workspace"):
+            openclaw_workspace = Path(ws).expanduser()
+
+        return cls(
+            portfolio_root=portfolio_root,
+            project_roots=project_roots,
+            default_status=default_status,
+            openclaw_workspace=openclaw_workspace,
+        )
+
+
+@dataclass
+class ProjectSettings:
+    """Project settings from .project/settings.toml."""
+
+    id: str
+    name: str
+    status: ProjectStatus = ProjectStatus.ACTIVE
+    priority: int = 5
+    repo_path: Path | None = None
+    labels: list[str] = field(default_factory=list)
+    project_dir: Path | None = None  # Set after loading
+
+    @classmethod
+    def load(cls, path: Path) -> ProjectSettings:
+        """Load project settings from TOML file."""
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+
+        repo_path = None
+        if rp := data.get("repo_path"):
+            repo_path = Path(rp).expanduser()
+
+        settings = cls(
+            id=data["id"],
+            name=data.get("name", data["id"]),
+            status=ProjectStatus(data.get("status", "active")),
+            priority=data.get("priority", 5),
+            repo_path=repo_path,
+            labels=data.get("labels", []),
+        )
+        settings.project_dir = path.parent.parent
+        return settings
+
+
+@dataclass
+class Task:
+    """A task with frontmatter and content."""
+
+    id: str
+    title: str
+    state: TaskState
+    priority: int = 5
+    complexity: TaskComplexity | None = None
+    depends: list[str] = field(default_factory=list)
+    parent: str | None = None
+    created: str | None = None
+    content: str = ""
+    file_path: Path | None = None
+
+    @classmethod
+    def from_file(cls, path: Path) -> Task:
+        """Load task from markdown file with YAML frontmatter."""
+        text = path.read_text()
+
+        # Determine state from filename/location
+        if path.parent.name == "done":
+            state = TaskState.DONE
+        elif path.parent.name == "blocked":
+            state = TaskState.BLOCKED
+        elif ".progress" in path.name:
+            state = TaskState.PROGRESS
+        else:
+            state = TaskState.OPEN
+
+        # Parse frontmatter
+        frontmatter: dict[str, Any] = {}
+        content = text
+
+        if text.startswith("---"):
+            parts = text.split("---", 2)
+            if len(parts) >= 3:
+                try:
+                    frontmatter = yaml.safe_load(parts[1]) or {}
+                    content = parts[2].strip()
+                except yaml.YAMLError:
+                    pass
+
+        # Extract title from first heading
+        title = frontmatter.get("id", path.stem)
+        for line in content.split("\n"):
+            if line.startswith("# "):
+                title = line[2:].strip()
+                break
+
+        complexity = None
+        if c := frontmatter.get("complexity"):
+            try:
+                complexity = TaskComplexity(c)
+            except ValueError:
+                pass
+
+        return cls(
+            id=frontmatter.get("id", path.stem.replace(".progress", "")),
+            title=title,
+            state=state,
+            priority=frontmatter.get("priority", 5),
+            complexity=complexity,
+            depends=frontmatter.get("depends", []),
+            parent=frontmatter.get("parent"),
+            created=frontmatter.get("created"),
+            content=content,
+            file_path=path,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON output."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "state": self.state.value,
+            "priority": self.priority,
+            "complexity": self.complexity.value if self.complexity else None,
+            "depends": self.depends,
+            "parent": self.parent,
+            "created": self.created,
+            "file_path": str(self.file_path) if self.file_path else None,
+        }
+
+
+@dataclass
+class WorkLogEntry:
+    """A work log entry."""
+
+    ts: datetime
+    project: str
+    action: WorkLogAction
+    agent: str = "main"
+    session_key: str | None = None
+    task: str | None = None
+    summary: str | None = None
+    next: str | None = None
+    files_changed: list[str] | None = None
+    blockers: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON output."""
+        return {
+            "ts": self.ts.isoformat() + "Z" if self.ts.tzinfo is None else self.ts.isoformat(),
+            "project": self.project,
+            "task": self.task,
+            "action": self.action.value,
+            "agent": self.agent,
+            "session_key": self.session_key,
+            "summary": self.summary,
+            "next": self.next,
+            "files_changed": self.files_changed,
+            "blockers": self.blockers,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WorkLogEntry:
+        """Create from dictionary."""
+        ts = data["ts"]
+        if isinstance(ts, str):
+            # Handle ISO format with Z suffix
+            ts = ts.rstrip("Z")
+            ts = datetime.fromisoformat(ts)
+
+        return cls(
+            ts=ts,
+            project=data["project"],
+            action=WorkLogAction(data["action"]),
+            agent=data.get("agent", "main"),
+            session_key=data.get("session_key"),
+            task=data.get("task"),
+            summary=data.get("summary"),
+            next=data.get("next"),
+            files_changed=data.get("files_changed"),
+            blockers=data.get("blockers"),
+        )
+
+
+@dataclass
+class Research:
+    """A research item."""
+
+    id: str
+    title: str
+    type: ResearchType
+    status: ResearchStatus = ResearchStatus.OPEN
+    tags: list[str] = field(default_factory=list)
+    created: str | None = None
+    content: str = ""
+    openclaw: dict[str, Any] | None = None
+    file_path: Path | None = None
+
+    @classmethod
+    def from_file(cls, path: Path) -> Research:
+        """Load research from markdown file with YAML frontmatter."""
+        text = path.read_text()
+
+        # Parse frontmatter
+        frontmatter: dict[str, Any] = {}
+        content = text
+
+        if text.startswith("---"):
+            parts = text.split("---", 2)
+            if len(parts) >= 3:
+                try:
+                    frontmatter = yaml.safe_load(parts[1]) or {}
+                    content = parts[2].strip()
+                except yaml.YAMLError:
+                    pass
+
+        # Extract title from first heading
+        title = frontmatter.get("id", path.stem)
+        for line in content.split("\n"):
+            if line.startswith("# "):
+                title = line[2:].strip()
+                break
+
+        return cls(
+            id=frontmatter.get("id", path.stem),
+            title=title,
+            type=ResearchType(frontmatter.get("type", "investigation")),
+            status=ResearchStatus(frontmatter.get("status", "open")),
+            tags=frontmatter.get("tags", []),
+            created=frontmatter.get("created"),
+            content=content,
+            openclaw=frontmatter.get("openclaw"),
+            file_path=path,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON output."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "type": self.type.value,
+            "status": self.status.value,
+            "tags": self.tags,
+            "created": self.created,
+            "openclaw": self.openclaw,
+            "file_path": str(self.file_path) if self.file_path else None,
+        }

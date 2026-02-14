@@ -1,0 +1,1 @@
+{"ts":"2026-02-05T10:52:00Z","type":"bug","command":"clawpm research add --tags testing,hooks","expected":"tags: [\"testing\", \"hooks\"]","actual":"tags: [\"testing,hooks\"]","context":"Tags passed with comma separator not split into array","severity":"low","suggestion":"Split comma-separated tags in CLI before passing to add_research","fixed":true}

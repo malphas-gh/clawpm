@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -1757,15 +1758,63 @@ def setup(ctx: click.Context, check: bool) -> None:
                 if portfolio_path:
                     click.echo(f"  Portfolio: {portfolio_path}")
     else:
-        # Interactive setup - just show instructions for now
-        if fmt == OutputFormat.JSON:
-            output_json({"message": "Create ~/clawpm/portfolio.toml to get started (or set CLAWPM_PORTFOLIO)"})
+        # Determine portfolio root
+        env_portfolio = os.environ.get("CLAWPM_PORTFOLIO")
+        if env_portfolio:
+            portfolio_root = Path(env_portfolio).expanduser()
         else:
-            click.echo("Manual setup:")
-            click.echo("  1. Create ~/clawpm directory (or set CLAWPM_PORTFOLIO env var)")
-            click.echo("  2. Create portfolio.toml in that directory")
-            click.echo("  3. Create projects/ subdirectory")
-            click.echo("  4. Create work_log.jsonl (empty file)")
+            portfolio_root = Path.home() / "clawpm"
+
+        # Check if already set up
+        if (portfolio_root / "portfolio.toml").exists():
+            output_success(f"Already set up at {portfolio_root}", fmt=fmt)
+            return
+
+        # Create directory structure
+        created: list[str] = []
+
+        portfolio_root.mkdir(parents=True, exist_ok=True)
+        created.append(str(portfolio_root))
+
+        projects_dir = portfolio_root / "projects"
+        projects_dir.mkdir(exist_ok=True)
+        created.append(str(projects_dir))
+
+        # Create portfolio.toml
+        portfolio_toml = portfolio_root / "portfolio.toml"
+        root_str = path_for_config(portfolio_root)
+        projects_str = path_for_config(projects_dir)
+        portfolio_toml.write_text(f'''# ClawPM Portfolio Configuration
+
+portfolio_root = "{root_str}"
+
+project_roots = [
+    "{projects_str}"
+]
+
+[defaults]
+status = "active"
+''')
+        created.append(str(portfolio_toml))
+
+        # Create empty work log
+        work_log = portfolio_root / "work_log.jsonl"
+        if not work_log.exists():
+            work_log.touch()
+            created.append(str(work_log))
+
+        if fmt == OutputFormat.JSON:
+            output_json({
+                "status": "created",
+                "portfolio_root": str(portfolio_root),
+                "created": created,
+            })
+        else:
+            click.echo(f"Portfolio created at {portfolio_root}")
+            click.echo(f"  projects/       - clone or init repos here")
+            click.echo(f"  portfolio.toml  - configuration")
+            click.echo(f"  work_log.jsonl  - activity log")
+            click.echo(f"\nNext: cd into a git repo and run 'clawpm add \"First task\"'")
 
 
 @main.command("version")

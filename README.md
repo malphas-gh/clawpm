@@ -97,13 +97,6 @@ clawpm issues add --type bug --severity high --actual "What happened"
 clawpm issues list [--open]
 ```
 
-### Sessions
-```bash
-clawpm sessions extract            # Extract OpenClaw sessions with clawpm calls
-clawpm sessions list               # List extracted sessions
-clawpm sessions process --all      # Mark sessions as processed
-```
-
 ## Project Auto-Detection
 
 ClawPM resolves your project automatically (in priority order):

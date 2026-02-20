@@ -178,16 +178,6 @@ clawpm issues add --type bug --severity high --actual "What happened"
 clawpm issues list [--open]             # Open issues only
 ```
 
-### Sessions (transcript extraction)
-```bash
-clawpm sessions extract                # Extract OpenClaw sessions with clawpm calls
-clawpm sessions extract --force        # Re-extract all (overwrite existing)
-clawpm sessions list                   # List extracted sessions with stats
-clawpm sessions list --processed       # List already-processed sessions
-clawpm sessions process <id-prefix>    # Move session to processed/
-clawpm sessions process --all          # Move all extracted to processed/
-```
-
 ### Admin
 ```bash
 clawpm setup               # Create portfolio (first-time)

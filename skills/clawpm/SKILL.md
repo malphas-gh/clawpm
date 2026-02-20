@@ -2,7 +2,7 @@
 name: clawpm
 description: Multi-project task and research management (JSON-first CLI)
 user-invocable: true
-metadata: { "openclaw": { "requires": { "bins": ["clawpm"] }, "emoji": "📋", "install": [{ "id": "uv", "kind": "uv", "package": "git+https://github.com/malphas-gh/clawpm", "bins": ["clawpm"], "label": "Install clawpm (uv)" }] } }
+metadata: { "openclaw": { "homepage": "https://github.com/malphas-gh/clawpm", "requires": { "bins": ["clawpm"] }, "emoji": "📋", "install": [{ "id": "uv", "kind": "uv", "package": "git+https://github.com/malphas-gh/clawpm", "bins": ["clawpm"], "label": "Install clawpm (uv)" }] } }
 ---
 
 # ClawPM Skill
@@ -15,8 +15,6 @@ Multi-project task management. All commands emit JSON by default; use `-f text` 
 clawpm setup               # Creates ~/clawpm/ with portfolio.toml, projects/, work_log.jsonl
 clawpm setup --check       # Verify installation
 ```
-
-Override portfolio location with `CLAWPM_PORTFOLIO` env var.
 
 ## Creating Projects
 
@@ -214,8 +212,7 @@ clawpm use --clear         # Clear context
 - **Flag order**: `clawpm [global flags] <command> [command flags]` — e.g. `clawpm -f text tasks list -s open`
 - **JSON output**: All commands emit JSON by default; use `-f text` for human-readable
 - **One command per call**: Don't chain clawpm commands with `&&` — run each separately
-- **Portfolio root**: Default `~/clawpm`, override via `CLAWPM_PORTFOLIO` env var
-- **Extra project roots**: Set `CLAWPM_PROJECT_ROOTS` (colon-separated) or add to `project_roots` in `portfolio.toml`
+- **Portfolio root**: Default `~/clawpm`
 - **Work log**: Append-only at `<portfolio>/work_log.jsonl`
 
 ## Troubleshooting

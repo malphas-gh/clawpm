@@ -18,6 +18,10 @@ dependencies = [
     "uvicorn[standard]>=0.23.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/malphas-gh/clawpm"
+Repository = "https://github.com/malphas-gh/clawpm"
+
 [project.scripts]
 clawpm = "clawpm.cli:main"
 
